@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('fonts/Poppins-Thin.ttf') format('ttf');
+  font-weight: 100;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('fonts/Poppins-ThinItalic.ttf') format('ttf');
+  font-weight: 100;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('fonts/Poppins-ExtraLight.ttf') format('ttf');
+  font-weight: 200;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('fonts/Poppins-ExtraLightItalic.ttf') format('ttf');
+  font-weight: 200;
+  font-style: italic;
+}
+
+/* ...repetir esto para cada peso y estilo... */
+@font-face {
+  font-family: 'Poppins';
+  src: url('fonts/Poppins-Black.ttf') format('ttf');
+  font-weight: 900;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('fonts/Poppins-BlackItalic.ttf') format('ttf');
+  font-weight: 900;
+  font-style: italic;
+}
+
+@keyframes fade-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide {
+  animation: fade-slide 0.15s ease-out;
+}
+@theme {
+  --font-family-poppins: 'Poppins', sans-serif;
+  /* --color-claro: #e5f4ef; */
+  --color-claro: #DCFCE7;
+  --color-medio: #56a691;
+  --color-oscuro: #307666;
+  --color-primary: #22c55e;
+  --color-background-light: #ffffff;
+}
+
+.IAHover {
+  animation: IAHover 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes IAHover {
+  0% {
+    transform: scale(1);
+  }
+
+  100% {
+    transform: scale(1.05);
+  }
+}
+
+* {
+  font-family: var(--font-family-poppins);
+  box-sizing: border-box;
+}
+
+.hero-bg-light {
+  background-image: linear-gradient(to right, #F0FDF4, #DCFCE7);
+}
+
+/* Custom checkbox styles used across the app */
+.custom-checkbox {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.25rem;
+  /* 20px */
+  height: 1.25rem;
+  border: 2px solid var(--color-primary);
+  border-radius: 0.35rem;
+  background-color: transparent;
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease, transform .08s ease;
+}
+
+.custom-checkbox:hover {
+  transform: translateY(-1px);
+}
+
+.custom-checkbox:checked {
+  background-color: var(--color-white);
+  border-color: var(--color-primary);
+}
+
+.custom-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--color-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.custom-checkbox:focus-visible {
+  outline: 3px solid rgba(86, 166, 145, 0.22);
+  /* subtle focus ring */
+  outline-offset: 2px;
+}
+
+/* small helper to align label spacing when using custom-checkbox */
+.checkbox-label {
+  cursor: pointer;
+}
+
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  display: none;
+}
+
+input[type="search"]::-moz-search-clear {
+  display: none;
+}
+
+/* Rules for sizing the icon. */
+.material-icons.md-18 {
+  font-size: 18px;
+}
+
+.material-icons.md-24 {
+  font-size: 24px;
+}
+
+.material-icons.md-36 {
+  font-size: 36px;
+}
+
+.material-icons.md-48 {
+  font-size: 48px;
+}

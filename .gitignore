@@ -1,0 +1,6 @@
+.env
+node_modules/
+vendor/
+coverage/
+backend/vendor/
+frontend/node_modules/

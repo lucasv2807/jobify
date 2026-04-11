@@ -1,0 +1,85 @@
+services:
+  # Arquitectura actual:
+  # - No hay reverse proxy unico para frontend+backend.
+  # - El frontend se expone por FRONTEND_PORT (host -> contenedor 80).
+  # - El backend se expone por BACKEND_PORT (host -> contenedor 80).
+  # - MariaDB solo vive en red interna y no publica puertos al host.
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${API_URL:?Falta API_URL. Copia .env.example a .env y completa valores.}
+        VITE_MP_CLIENT_ID: ${VITE_MP_CLIENT_ID:-}
+        VITE_API_PROXY_TARGET: ${VITE_API_PROXY_TARGET:-}
+    ports:
+      - "${FRONTEND_PORT:?Falta FRONTEND_PORT en .env}:80"
+    container_name: frontend
+    networks:
+      - public
+      - internal
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:?Falta BACKEND_PORT en .env}:80"
+    container_name: backend
+    environment:
+      MARIADB_HOST: ${MARIADB_HOST:?Falta MARIADB_HOST en .env}
+      MARIADB_PORT: ${MARIADB_PORT:?Falta MARIADB_PORT en .env}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:?Falta MARIADB_DATABASE en .env}
+      MARIADB_USERNAME: ${MARIADB_USERNAME:?Falta MARIADB_USERNAME en .env}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Falta MARIADB_PASSWORD en .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Falta ADMIN_PASSWORD en .env}
+      CLOUDINARY_URL: ${CLOUDINARY_URL:-}
+      MERCADOPAGO_CLIENT_ID: ${MERCADOPAGO_CLIENT_ID:-}
+      MERCADOPAGO_CLIENT_SECRET: ${MERCADOPAGO_CLIENT_SECRET:-}
+      MERCADOPAGO_REDIRECT_URI: ${MERCADOPAGO_REDIRECT_URI:-}
+      FRONTEND_URL: ${APP_URL:?Falta APP_URL en .env}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      KEY_HEX: ${KEY_HEX:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Falta CORS_ORIGIN en .env}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - public
+      - internal
+    healthcheck:
+      test: [ "CMD-SHELL", "php -r 'exit((int)!@fsockopen(\"127.0.0.1\", 80));'" ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mariadb:
+    image: mariadb:${MARIADB_VERSION:?Falta MARIADB_VERSION en .env}
+    container_name: mariadb
+    environment:
+      MYSQL_USER: ${MARIADB_USERNAME:?Falta MARIADB_USERNAME en .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Falta MYSQL_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: ${MARIADB_DATABASE:?Falta MARIADB_DATABASE en .env}
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD:?Falta MARIADB_PASSWORD en .env}
+    networks:
+      - internal
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MARIADB_USERNAME} -p$${MARIADB_PASSWORD} --silent" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+volumes:
+  db:
+
+
+networks:
+  public:
+  internal:
+    internal: true

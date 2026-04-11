@@ -1,0 +1,12 @@
+# PHPUnit cache
+.phpunit.cache/
+.phpunit.result.cache
+
+# Coverage reports
+coverage/
+*.coverage
+clover.xml
+.coverage.xml
+
+# Test outputs
+test-output/

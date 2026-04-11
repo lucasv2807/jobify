@@ -1,0 +1,28 @@
+{
+    "name": "jobify/jobify",
+    "autoload": {
+        "psr-4": {
+            "Jobify\\Jobify\\": "src/"
+        }
+    },
+    "require": {
+        "vlucas/phpdotenv": "^5.6",
+        "cloudinary/cloudinary_php": "^3.1",
+        "mercadopago/dx-php": "3.6.0"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3.13",
+        "friendsofphp/php-cs-fixer": "^3.86",
+        "phpunit/phpunit": "12"
+    },
+    "scripts": {
+        "dev": "php -S 0.0.0.0:3000",
+        "lint": "phpcs",
+        "lint:fix": "php-cs-fixer fix",
+        "lint:check": "php-cs-fixer fix --dry-run --diff",
+        "check": "phpcs --report=summary",
+        "test": "phpunit",
+        "test:coverage": "phpunit --coverage-html coverage",
+        "test:filter": "phpunit --filter"
+    }
+}
