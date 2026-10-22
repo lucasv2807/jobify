@@ -1,0 +1,4024 @@
+{
+  "meta": {
+    "description": "Golden cases for the Jobify legacy HTTP contract. Load docs/api/seed.sql first and run cases in list order: several cases create or mutate rows.",
+    "baseUrl": "http://localhost:8081",
+    "seed": "docs/api/seed.sql",
+    "harness": "PHP 8.4.23 built-in server + MariaDB 10.6.21, loopback-only network. See docs/api/DUDAS.md.",
+    "requestBodyTypes": {
+      "none": "no body",
+      "form": "application/x-www-form-urlencoded fields",
+      "multipart": "multipart/form-data fields plus file paths relative to the repository root",
+      "json": "application/json body"
+    },
+    "expectedHeaders": "Only content-type is normative; Date, Host, Connection and X-Powered-By are environment-specific. nginx adds CORS/security headers in the real deployment.",
+    "evidence": {
+      "EJECUTADO": "recorded from a real request",
+      "LEÍDO": "expected from code, not executed"
+    }
+  },
+  "cases": [
+    {
+      "id": "usuarioLogin.happy",
+      "operationId": "usuarioLogin",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/usuario/login",
+        "headers": {},
+        "query": {
+          "email": "juan@example.com",
+          "password": "cliente123"
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Login exitoso",
+          "data": {
+            "id": 1,
+            "nombre": "Juan",
+            "foto_perfil": "https://example.com/avatars/juan.png"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "usuarioLogin.badPassword",
+      "operationId": "usuarioLogin",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/usuario/login",
+        "headers": {},
+        "query": {
+          "email": "juan@example.com",
+          "password": "wrong"
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Credenciales incorrectas",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "usuarioLogin.missing",
+      "operationId": "usuarioLogin",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/usuario/login",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "usuarioGetUser.client",
+      "operationId": "usuarioGetUser",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/usuario/getUser",
+        "headers": {},
+        "query": {
+          "id": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Usuario encontrado",
+          "data": {
+            "id": 1,
+            "nombre": "Juan",
+            "apellido": "Perez",
+            "email": "juan@example.com",
+            "fecha_nacimiento": "1990-01-01",
+            "foto_perfil": "https://example.com/avatars/juan.png",
+            "telefono": "099111111",
+            "esProveedor": false
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "usuarioGetUser.provider",
+      "operationId": "usuarioGetUser",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/usuario/getUser",
+        "headers": {},
+        "query": {
+          "id": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Usuario encontrado",
+          "data": {
+            "id": 2,
+            "nombre": "Maria",
+            "apellido": "Gomez",
+            "email": "maria@example.com",
+            "fecha_nacimiento": "1985-05-05",
+            "foto_perfil": "https://example.com/avatars/maria.png",
+            "telefono": "099222222",
+            "nombre_empresa": "Gomez Servicios",
+            "descripcion": "Plomeria y reparaciones generales",
+            "experiencia": 5,
+            "habilidades": [],
+            "titulos": [],
+            "esProveedor": true,
+            "registroMp": false,
+            "calificacionPromedio": 5,
+            "totalResenas": 1
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "usuarioGetUser.notFound",
+      "operationId": "usuarioGetUser",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/usuario/getUser",
+        "headers": {},
+        "query": {
+          "id": 999
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Usuario no encontrado",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "usuarioGetUser.missing",
+      "operationId": "usuarioGetUser",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/usuario/getUser",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "ID de usuario no proporcionado",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "usuarioRegister.missing",
+      "operationId": "usuarioRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/register",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Ana"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "usuarioRegister.digits",
+      "operationId": "usuarioRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/register",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Ana2",
+            "apellido": "Diaz",
+            "email": "ana2@example.com",
+            "password": "Clave123!",
+            "fecha_nacimiento": "1995-01-01"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "El nombre no puede contener números",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "usuarioRegister.underage",
+      "operationId": "usuarioRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/register",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Nene",
+            "apellido": "Diaz",
+            "email": "nene@example.com",
+            "password": "Clave123!",
+            "fecha_nacimiento": "2020-01-01"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Debes tener al menos 18 años para registrarte",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "usuarioRegister.client",
+      "operationId": "usuarioRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/register",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Ana",
+            "apellido": "Diaz",
+            "email": "ana@example.com",
+            "password": "Clave123!",
+            "fecha_nacimiento": "1995-01-01",
+            "telefono": "099444444",
+            "es_proveedor": "false"
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Usuario registrado exitosamente",
+          "data": {
+            "id": "4"
+          },
+          "code": 201
+        }
+      }
+    },
+    {
+      "id": "usuarioRegister.duplicate",
+      "operationId": "usuarioRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/register",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Ana",
+            "apellido": "Diaz",
+            "email": "ana@example.com",
+            "password": "Clave123!",
+            "fecha_nacimiento": "1995-01-01"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'ana@example.com' for key 'email'",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "usuarioRegister.provider",
+      "operationId": "usuarioRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/register",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Luis",
+            "apellido": "Sosa",
+            "email": "luis@example.com",
+            "password": "Clave123!",
+            "fecha_nacimiento": "1990-01-01",
+            "telefono": "099555555",
+            "es_proveedor": "true",
+            "nombre_empresa": "Sosa Fix",
+            "descripcion": "Electricidad",
+            "experiencia": "3",
+            "habilidades[]": [
+              "Electricidad"
+            ],
+            "titulos[]": [
+              "Tecnico"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Usuario registrado exitosamente",
+          "data": {
+            "id": "6"
+          },
+          "code": 201
+        }
+      }
+    },
+    {
+      "id": "usuarioRegister.providerMissing",
+      "operationId": "usuarioRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/register",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Luis",
+            "apellido": "Sosa",
+            "email": "luis2@example.com",
+            "password": "Clave123!",
+            "fecha_nacimiento": "1990-01-01",
+            "es_proveedor": "true"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios para el registro como proveedor",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "usuarioUpdateProfile.happy",
+      "operationId": "usuarioUpdateProfile",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/updateProfile",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idUsuario": "1",
+            "nombre": "Juan Carlos",
+            "apellido": "Perez",
+            "email": "juan@example.com",
+            "telefono": "099777777"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Perfil actualizado exitosamente",
+          "data": {
+            "success": true,
+            "mensaje": "Perfil actualizado correctamente"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "usuarioUpdateProfile.noId",
+      "operationId": "usuarioUpdateProfile",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/updateProfile",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "Juan"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Falta el ID de usuario",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "usuarioUpdateProfile.notFound",
+      "operationId": "usuarioUpdateProfile",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/updateProfile",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idUsuario": "999",
+            "nombre": "Juan"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "El usuario debe tener al menos 18 años",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "usuarioUpdatePassword.badCurrent",
+      "operationId": "usuarioUpdatePassword",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/updatePassword",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idUsuario": "1",
+            "passwordActual": "wrong",
+            "nuevoPassword": "nuevo123"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "La contraseña actual es incorrecta",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "usuarioUpdatePassword.happy",
+      "operationId": "usuarioUpdatePassword",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/usuario/updatePassword",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idUsuario": "1",
+            "passwordActual": "cliente123",
+            "nuevoPassword": "nuevo123"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Contraseña actualizada exitosamente",
+          "data": {
+            "success": true
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "usuarioMethodNotAllowed",
+      "operationId": "usuarioLogin",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/usuario/login",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "email": "juan@example.com",
+            "password": "cliente123"
+          }
+        }
+      },
+      "expected": {
+        "status": 405,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Método no permitido",
+          "code": 405
+        }
+      }
+    },
+    {
+      "id": "servicioGet.detail",
+      "operationId": "serviciosGetServicio",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/getServicio",
+        "headers": {},
+        "query": {
+          "id": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicio obtenido exitosamente",
+          "data": {
+            "id": 1,
+            "nombre": "Plomeria a domicilio",
+            "precio": 1500,
+            "idProveedor": 2,
+            "descripcion": "Reparacion de canerias y griferia",
+            "imagenes": [
+              "https://example.com/services/plomeria.jpg"
+            ],
+            "categorias": [
+              "Plomeria"
+            ],
+            "ubicaciones": [
+              "Montevideo"
+            ],
+            "diasDisponibles": [
+              "Lunes",
+              "Miercoles"
+            ],
+            "nombreProveedor": "Maria",
+            "apellidoProveedor": "Gomez",
+            "imagenProveedor": "https://example.com/avatars/maria.png"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioGet.notFound",
+      "operationId": "serviciosGetServicio",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/getServicio",
+        "headers": {},
+        "query": {
+          "id": 999
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al obtener el servicio",
+          "code": 500,
+          "error": "Servicio no encontrado"
+        }
+      },
+      "note": "Unknown service id returns 500 (the route's 404 branch is unreachable)."
+    },
+    {
+      "id": "servicioGet.catalogue",
+      "operationId": "serviciosGetServicio",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/getServicio",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicio obtenido exitosamente",
+          "data": [
+            {
+              "id": 1,
+              "nombre": "Plomeria a domicilio",
+              "precio": 1500,
+              "imagen": "https://example.com/services/plomeria.jpg",
+              "categorias": [
+                "Plomeria"
+              ],
+              "ubicaciones": [
+                "Montevideo"
+              ],
+              "diasDisponibles": [
+                "Lunes",
+                "Miercoles"
+              ],
+              "calificacion": 5,
+              "calificaciones": 1,
+              "nombre_proveedor": "Maria"
+            },
+            {
+              "id": 2,
+              "nombre": "Jardineria basica",
+              "precio": 2000,
+              "imagen": "https://example.com/services/jardineria.jpg",
+              "categorias": [
+                "Jardineria"
+              ],
+              "ubicaciones": [
+                "Canelones"
+              ],
+              "diasDisponibles": [
+                "Viernes"
+              ],
+              "calificacion": null,
+              "calificaciones": 0,
+              "nombre_proveedor": "Maria"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioSearch.matches",
+      "operationId": "serviciosSearch",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/search",
+        "headers": {},
+        "query": {
+          "q": "plomeria"
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Búsqueda realizada exitosamente",
+          "data": [
+            {
+              "id": 1,
+              "nombre": "Plomeria a domicilio",
+              "precio": 1500,
+              "descripcion": "Reparacion de canerias y griferia",
+              "categorias": [
+                "Plomeria"
+              ],
+              "ubicaciones": [
+                "Montevideo"
+              ],
+              "diasDisponibles": [
+                "Lunes",
+                "Miercoles"
+              ],
+              "imagenes": "https://example.com/services/plomeria.jpg"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioSearch.noResults",
+      "operationId": "serviciosSearch",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/search",
+        "headers": {},
+        "query": {
+          "q": "zzzz"
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Búsqueda realizada exitosamente",
+          "data": {
+            "result": "No se encontraron servicios que coincidan con la búsqueda"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioSearch.missing",
+      "operationId": "serviciosSearch",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/search",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Falta el parámetro de búsqueda",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "servicioIa.ok",
+      "operationId": "serviciosIa",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/IA",
+        "headers": {},
+        "query": {
+          "pregunta": "necesito plomero"
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicios listados exitosamente",
+          "data": {
+            "response": "{\"error\":{\"error\":\"Could not resolve host: api.groq.com (Could not contact DNS servers)\"}}"
+          },
+          "code": 200
+        }
+      },
+      "note": "Groq is unreachable in the harness; the external error string is wrapped in data.response with HTTP 200."
+    },
+    {
+      "id": "servicioIa.missing",
+      "operationId": "serviciosIa",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/IA",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "Missing pregunta -> TypeError -> HTTP 500 with empty body."
+    },
+    {
+      "id": "servicioByProvider.list",
+      "operationId": "serviciosByProveedor",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/getServiciosByProveedor",
+        "headers": {},
+        "query": {
+          "idProveedor": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicios listados exitosamente",
+          "data": {
+            "response": [
+              {
+                "id": 1,
+                "nombre": "Plomeria a domicilio",
+                "precio": 1500,
+                "descripcion": "Reparacion de canerias y griferia",
+                "categorias": [
+                  "Plomeria"
+                ],
+                "ubicaciones": [
+                  "Montevideo"
+                ],
+                "diasDisponibles": [
+                  "Lunes",
+                  "Miercoles"
+                ],
+                "imagenes": "https://example.com/services/plomeria.jpg"
+              },
+              {
+                "id": 2,
+                "nombre": "Jardineria basica",
+                "precio": 2000,
+                "descripcion": "Corte de cesped y poda",
+                "categorias": [
+                  "Jardineria"
+                ],
+                "ubicaciones": [
+                  "Canelones"
+                ],
+                "diasDisponibles": [
+                  "Viernes"
+                ],
+                "imagenes": "https://example.com/services/jardineria.jpg"
+              }
+            ]
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioByProvider.empty",
+      "operationId": "serviciosByProveedor",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/getServiciosByProveedor",
+        "headers": {},
+        "query": {
+          "idProveedor": 999
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicios listados exitosamente",
+          "data": {
+            "response": {
+              "result": "No se encontraron servicios para el proveedor dado"
+            }
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioFavoritos.list",
+      "operationId": "serviciosGetFavoritos",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/getFavoritos",
+        "headers": {},
+        "query": {
+          "idCliente": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Favoritos listados exitosamente",
+          "data": {
+            "response": [
+              {
+                "isFavorito": true,
+                "id": 1,
+                "nombre": "Plomeria a domicilio",
+                "precio": 1500,
+                "descripcion": "Reparacion de canerias y griferia",
+                "categorias": [
+                  "Plomeria"
+                ],
+                "ubicaciones": [
+                  "Montevideo"
+                ],
+                "diasDisponibles": [
+                  "Lunes",
+                  "Miercoles"
+                ],
+                "imagenes": "https://example.com/services/plomeria.jpg"
+              }
+            ]
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioFavoritos.notClient",
+      "operationId": "serviciosGetFavoritos",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/servicios/getFavoritos",
+        "headers": {},
+        "query": {
+          "idCliente": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al listar favoritos",
+          "code": 500,
+          "error": "El usuario no es un cliente"
+        }
+      }
+    },
+    {
+      "id": "servicioEliminarFavorito.ok",
+      "operationId": "serviciosEliminarFavorito",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/eliminarFavorito",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idServicio": "1",
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Favorito eliminado exitosamente",
+          "data": {
+            "success": "Servicio eliminado de favoritos"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioEliminarFavorito.absent",
+      "operationId": "serviciosEliminarFavorito",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/eliminarFavorito",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idServicio": "1",
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al eliminar el favorito",
+          "code": 500,
+          "error": "El servicio no está en favoritos"
+        }
+      }
+    },
+    {
+      "id": "servicioSaveFavorito.ok",
+      "operationId": "serviciosSaveFavorito",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/saveFavorito",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idServicio": "1",
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Favorito guardado exitosamente",
+          "data": {
+            "success": "Servicio guardado en favoritos"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioSaveFavorito.duplicate",
+      "operationId": "serviciosSaveFavorito",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/saveFavorito",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idServicio": "1",
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al guardar el favorito",
+          "code": 500,
+          "error": "El servicio ya está en favoritos"
+        }
+      }
+    },
+    {
+      "id": "servicioCrear.missing",
+      "operationId": "serviciosCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/crear",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idProveedor": "2"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "servicioCrear.photo",
+      "operationId": "serviciosCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/crear",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idProveedor": "2",
+            "nombre": "Jardineria",
+            "descripcion": "Corte de pasto",
+            "categoria[]": [
+              "Jardineria"
+            ],
+            "ubicacion[]": [
+              "Montevideo"
+            ],
+            "precio": "2000",
+            "diasDisponibles[]": [
+              "Lunes"
+            ]
+          },
+          "files": {
+            "fotoServicio[]": "docs/api/fixtures/pixel.png"
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicio creado exitosamente",
+          "data": {
+            "id": "3"
+          },
+          "code": 201
+        }
+      },
+      "note": "Executed with Cloudinary unreachable: the service is created and Servicio_Imagen stores the literal string 'Array'. A working Cloudinary returns a URL instead (see QUIRKS Q21)."
+    },
+    {
+      "id": "servicioCrear.singlePhoto",
+      "operationId": "serviciosCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/crear",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idProveedor": "2",
+            "nombre": "Pintura",
+            "descripcion": "Paredes",
+            "categoria[]": [
+              "Pintura"
+            ],
+            "ubicacion[]": [
+              "Montevideo"
+            ],
+            "precio": "3000",
+            "diasDisponibles[]": [
+              "Martes"
+            ]
+          },
+          "files": {
+            "fotoServicio": "docs/api/fixtures/pixel.png"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "Single file without [] -> count() TypeError -> HTTP 500 with empty body."
+    },
+    {
+      "id": "servicioUpdate.ok",
+      "operationId": "serviciosUpdateServicio",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/updateServicio",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idServicio": "1",
+            "nombre": "Plomeria express",
+            "descripcion": "Reparaciones",
+            "precio": "1800",
+            "categoria[]": [
+              "Plomeria"
+            ],
+            "ubicacion[]": [
+              "Montevideo"
+            ],
+            "diasDisponibles[]": [
+              "Martes"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicio actualizado exitosamente",
+          "data": {
+            "success": "Servicio actualizado correctamente"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioUpdate.noId",
+      "operationId": "serviciosUpdateServicio",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/updateServicio",
+        "headers": {
+          "Content-Type": "multipart/form-data"
+        },
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "nombre": "X"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos",
+          "code": 400,
+          "error": "El parámetro idServicio es requerido"
+        }
+      }
+    },
+    {
+      "id": "servicioBorrar.ok",
+      "operationId": "serviciosBorrar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/borrar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idServicio": "3",
+            "idProveedor": "2"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicio eliminado exitosamente",
+          "data": {
+            "success": "Servicio borrado correctamente"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "servicioBorrar.notFound",
+      "operationId": "serviciosBorrar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/borrar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idServicio": "3",
+            "idProveedor": "2"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al borrar el servicio",
+          "code": 500,
+          "error": "Servicio no encontrado"
+        }
+      },
+      "note": "Second delete of the same id returns 500."
+    },
+    {
+      "id": "servicioMethodNotAllowed",
+      "operationId": "serviciosBorrar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "DELETE",
+        "path": "/servicios/borrar",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 405,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Método no permitido",
+          "code": 405
+        }
+      }
+    },
+    {
+      "id": "chatSend.ok",
+      "operationId": "chatSend",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/chat/send",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "mensaje": "Hola de nuevo",
+            "idEmisor": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Mensaje enviado exitosamente",
+          "data": {
+            "success": true
+          },
+          "code": 201
+        }
+      }
+    },
+    {
+      "id": "chatSend.empty",
+      "operationId": "chatSend",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/chat/send",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "mensaje": "",
+            "idEmisor": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al enviar el mensaje",
+          "code": 500,
+          "error": "El mensaje no puede estar vacío"
+        }
+      }
+    },
+    {
+      "id": "chatSend.missing",
+      "operationId": "chatSend",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/chat/send",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos. idCliente: 1, idServicio: , mensaje: , idEmisor: ",
+          "code": 400
+        }
+      },
+      "note": "The 400 message concatenates the received values, including empty ones."
+    },
+    {
+      "id": "chatCreate.ok",
+      "operationId": "chatCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/chat/crear",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "2",
+            "idProveedor": "2"
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Chat creado exitosamente",
+          "data": {
+            "success": true
+          },
+          "code": 201
+        }
+      }
+    },
+    {
+      "id": "chatCreate.duplicate",
+      "operationId": "chatCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/chat/crear",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "2",
+            "idProveedor": "2"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al crear el chat",
+          "code": 500,
+          "error": "Ocurrió un error al crear el chat"
+        }
+      },
+      "note": "Duplicate (idCliente,idServicio) is swallowed into a generic 500."
+    },
+    {
+      "id": "chatHistory.ok",
+      "operationId": "chatHistory",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/chat/history",
+        "headers": {},
+        "query": {
+          "idCliente": 1,
+          "idServicio": 1,
+          "idProveedor": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Historial de mensajes obtenido exitosamente",
+          "data": {
+            "chat": {
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "confirmado": 0,
+              "idReserva": 1,
+              "imagenCliente": "https://example.com/avatars/juan.png",
+              "nombreCliente": "Juan Carlos",
+              "apellidoCliente": "Perez",
+              "imagenProveedor": "https://example.com/avatars/maria.png",
+              "nombreProveedor": "Maria",
+              "apellidoProveedor": "Gomez"
+            },
+            "messages": [
+              {
+                "idMensaje": 1,
+                "idCliente": 1,
+                "idServicio": 1,
+                "idEmisor": 1,
+                "mensaje": "Hola, necesito una reparacion"
+              },
+              {
+                "idMensaje": 2,
+                "idCliente": 1,
+                "idServicio": 1,
+                "idEmisor": 1,
+                "mensaje": "Hola de nuevo"
+              }
+            ]
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "chatHistory.wrongProvider",
+      "operationId": "chatHistory",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/chat/history",
+        "headers": {},
+        "query": {
+          "idCliente": 1,
+          "idServicio": 1,
+          "idProveedor": 3
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al obtener el historial de mensajes",
+          "code": 500,
+          "error": "El proveedor no tiene acceso a este chat"
+        }
+      }
+    },
+    {
+      "id": "chatHistory.missing",
+      "operationId": "chatHistory",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/chat/history",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "chatCliente.ok",
+      "operationId": "chatChatsCliente",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/chat/chatsCliente",
+        "headers": {},
+        "query": {
+          "id": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Chats del cliente obtenidos exitosamente",
+          "data": [
+            {
+              "tipo": "Chat",
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "nombre": "Maria",
+              "apellido": "Gomez",
+              "imagen": "https://example.com/avatars/maria.png",
+              "servicioTitulo": "Plomeria express"
+            },
+            {
+              "tipo": "Chat",
+              "idCliente": 1,
+              "idServicio": 2,
+              "idProveedor": 2,
+              "nombre": "Maria",
+              "apellido": "Gomez",
+              "imagen": "https://example.com/avatars/maria.png",
+              "servicioTitulo": "Jardineria basica"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "chatCliente.unknown",
+      "operationId": "chatChatsCliente",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/chat/chatsCliente",
+        "headers": {},
+        "query": {
+          "id": 999
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Chats del cliente obtenidos exitosamente",
+          "data": [],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "chatProveedor.ok",
+      "operationId": "chatChatsProveedor",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/chat/chatsProveedor",
+        "headers": {},
+        "query": {
+          "id": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Chats del proveedor obtenidos exitosamente",
+          "data": [
+            {
+              "tipo": "Chat",
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "nombre": "Juan Carlos",
+              "apellido": "Perez",
+              "imagen": "https://example.com/avatars/juan.png",
+              "servicioTitulo": "Plomeria express"
+            },
+            {
+              "tipo": "Chat",
+              "idCliente": 1,
+              "idServicio": 2,
+              "idProveedor": 2,
+              "nombre": "Juan Carlos",
+              "apellido": "Perez",
+              "imagen": "https://example.com/avatars/juan.png",
+              "servicioTitulo": "Jardineria basica"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "chatProveedor.missing",
+      "operationId": "chatChatsProveedor",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/chat/chatsProveedor",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "chatMethodPut",
+      "operationId": "chatSend",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/chat/send",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "PUT on a chat route: 200 with empty body (no default branch)."
+    },
+    {
+      "id": "reviewCreate.ok",
+      "operationId": "reviewSubirReview",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/review/subirReview",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "2",
+            "calificacion": "4",
+            "comentario": "Muy buen trabajo"
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "resena enviada exitosamente",
+          "data": {
+            "id": "2"
+          },
+          "code": 201
+        }
+      }
+    },
+    {
+      "id": "reviewCreate.duplicate",
+      "operationId": "reviewSubirReview",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/review/subirReview",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "2",
+            "calificacion": "4",
+            "comentario": "Otra"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-2' for key 'PRIMARY'",
+          "code": 500
+        }
+      },
+      "note": "Duplicate review for the same client/service exposes the raw SQLSTATE message."
+    },
+    {
+      "id": "reviewCreate.missing",
+      "operationId": "reviewSubirReview",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/review/subirReview",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "reviewCreate.rating6",
+      "operationId": "reviewSubirReview",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/review/subirReview",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "calificacion": "6",
+            "comentario": "x"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "La calificación debe estar entre 1 y 5",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "reviewGet.ok",
+      "operationId": "reviewGetReview",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/review/getReview",
+        "headers": {},
+        "query": {
+          "idServicio": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "resena obtenida exitosamente",
+          "data": [
+            {
+              "idResena": 1,
+              "calificacion": 5,
+              "comentario": "Excelente trabajo",
+              "imagen": null,
+              "nombreCliente": "Juan Carlos",
+              "apellidoCliente": "Perez",
+              "imagenCliente": "https://example.com/avatars/juan.png",
+              "idCliente": 1
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "reviewGet.missing",
+      "operationId": "reviewGetReview",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/review/getReview",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "resena obtenida exitosamente",
+          "data": [],
+          "code": 200
+        }
+      },
+      "note": "Missing idServicio returns 200 with an empty array."
+    },
+    {
+      "id": "reservaCreate.ok",
+      "operationId": "reservaCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/crear",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "2",
+            "fecha": "2026-12-15"
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Reserva creada exitosamente",
+          "data": {
+            "result": "2"
+          },
+          "code": 201
+        }
+      }
+    },
+    {
+      "id": "reservaCreate.missing",
+      "operationId": "reservaCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/crear",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "reservaCreate.noService",
+      "operationId": "reservaCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/crear",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "999",
+            "fecha": "2026-12-15"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "El servicio con ID 999 no existe",
+          "code": 500
+        }
+      }
+    },
+    {
+      "id": "reservaConfirm.ok",
+      "operationId": "reservaConfirmar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/confirmar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "confirmado": "1",
+            "idCliente": "1",
+            "idServicio": "1",
+            "idReserva": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Reserva confirmada exitosamente",
+          "data": {
+            "success": true
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "reservaConfirm.missing",
+      "operationId": "reservaConfirmar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/confirmar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "confirmado": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "reservaConfirm.inexistent",
+      "operationId": "reservaConfirmar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/confirmar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "confirmado": "1",
+            "idCliente": "1",
+            "idServicio": "1",
+            "idReserva": "999"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Reserva confirmada exitosamente",
+          "data": {
+            "success": true
+          },
+          "code": 200
+        }
+      },
+      "note": "Confirming a non-existent reservation still returns success (0 affected rows is not checked)."
+    },
+    {
+      "id": "reservaDelete.ok",
+      "operationId": "reservaEliminar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/eliminarReserva",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "id": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Reserva eliminada exitosamente",
+          "data": {
+            "success": true
+          },
+          "code": 200
+        }
+      },
+      "note": "Deletes reservation id 1; later chat/reservation reads must not depend on it."
+    },
+    {
+      "id": "reservaDelete.missing",
+      "operationId": "reservaEliminar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/reserva/eliminarReserva",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {}
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "reservaProvider.ok",
+      "operationId": "reservaGetProveedor",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/reserva/getReservaProveedor",
+        "headers": {},
+        "query": {
+          "id": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Reserva obtenida exitosamente",
+          "data": [
+            {
+              "tipo": "schedule",
+              "idReserva": 2,
+              "idCliente": 1,
+              "idServicio": 2,
+              "fecha": "2026-12-15",
+              "confirmado": 0,
+              "servicioTitulo": "Jardineria basica",
+              "nombreCliente": "Juan Carlos",
+              "apellidoCliente": "Perez",
+              "imagen": "https://example.com/avatars/juan.png"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "reservaProvider.missing",
+      "operationId": "reservaGetProveedor",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/reserva/getReservaProveedor",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "reservaClient.ok",
+      "operationId": "reservaGetCliente",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/reserva/getReservaCliente",
+        "headers": {},
+        "query": {
+          "id": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Reserva obtenida exitosamente",
+          "data": [
+            {
+              "tipo": "schedule",
+              "idReserva": 2,
+              "idCliente": 1,
+              "idServicio": 2,
+              "fecha": "2026-12-15",
+              "confirmado": 0,
+              "servicioTitulo": "Jardineria basica",
+              "nombreProveedor": "Maria",
+              "apellidoProveedor": "Gomez",
+              "imagen": "https://example.com/avatars/maria.png"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "reservaById.ok",
+      "operationId": "reservaGetById",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/reserva/getReservaById",
+        "headers": {},
+        "query": {
+          "id": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Reserva obtenida exitosamente",
+          "data": {
+            "tipo": "schedule",
+            "idReserva": 2,
+            "idCliente": 1,
+            "idServicio": 2,
+            "fecha": "2026-12-15",
+            "confirmado": 0,
+            "titulo": "Jardineria basica",
+            "precio": 2000,
+            "descripcion": "Corte de cesped y poda",
+            "idUsuario": 1,
+            "nombre": "Juan Carlos",
+            "apellido": "Perez",
+            "imagen": "https://example.com/avatars/juan.png",
+            "email": "juan@example.com",
+            "fechaNac": "1990-01-01"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "reservaById.notFound",
+      "operationId": "reservaGetById",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/reserva/getReservaById",
+        "headers": {},
+        "query": {
+          "id": 999
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al obtener la reserva",
+          "code": 500
+        }
+      },
+      "note": "Unknown id -> 500, not 404."
+    },
+    {
+      "id": "reservaMethodPut",
+      "operationId": "reservaCrear",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/reserva/crear",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "PUT on a reservation route: 200 with empty body (no default branch)."
+    },
+    {
+      "id": "pagoHistCliente.ok",
+      "operationId": "pagoHistorialCliente",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/historialCliente",
+        "headers": {},
+        "query": {
+          "id": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Historial de pagos obtenido exitosamente",
+          "data": [
+            {
+              "idCliente": 1,
+              "idServicio": 2,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-04 10:00:00",
+              "estado": "pendiente",
+              "precio": "2000.00",
+              "titulo": "Jardineria basica",
+              "paymentId": null,
+              "servicioTitulo": "Jardineria basica",
+              "servicioDescripcion": "Corte de cesped y poda",
+              "nombre": "Maria",
+              "apellido": "Gomez",
+              "imagen": "https://example.com/avatars/maria.png",
+              "nombreEmpresa": "Gomez Servicios"
+            },
+            {
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-03 10:00:00",
+              "estado": "completado",
+              "precio": "1500.00",
+              "titulo": "Plomeria a domicilio",
+              "paymentId": null,
+              "servicioTitulo": "Plomeria express",
+              "servicioDescripcion": "Reparaciones",
+              "nombre": "Maria",
+              "apellido": "Gomez",
+              "imagen": "https://example.com/avatars/maria.png",
+              "nombreEmpresa": "Gomez Servicios"
+            },
+            {
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-02 10:00:00",
+              "estado": "pendiente",
+              "precio": "1500.00",
+              "titulo": "Plomeria a domicilio",
+              "paymentId": null,
+              "servicioTitulo": "Plomeria express",
+              "servicioDescripcion": "Reparaciones",
+              "nombre": "Maria",
+              "apellido": "Gomez",
+              "imagen": "https://example.com/avatars/maria.png",
+              "nombreEmpresa": "Gomez Servicios"
+            },
+            {
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-01 10:00:00",
+              "estado": "pendiente",
+              "precio": "1500.00",
+              "titulo": "Plomeria a domicilio",
+              "paymentId": null,
+              "servicioTitulo": "Plomeria express",
+              "servicioDescripcion": "Reparaciones",
+              "nombre": "Maria",
+              "apellido": "Gomez",
+              "imagen": "https://example.com/avatars/maria.png",
+              "nombreEmpresa": "Gomez Servicios"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoHistCliente.missing",
+      "operationId": "pagoHistorialCliente",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/historialCliente",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos. idCliente: ",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoHistProveedor.ok",
+      "operationId": "pagoHistorialProveedor",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/historialProveedor",
+        "headers": {},
+        "query": {
+          "id": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Historial de pagos del proveedor obtenido exitosamente",
+          "data": [
+            {
+              "idCliente": 1,
+              "idServicio": 2,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-04 10:00:00",
+              "estado": "pendiente",
+              "precio": "2000.00",
+              "titulo": "Jardineria basica",
+              "paymentId": null,
+              "servicioTitulo": "Jardineria basica",
+              "servicioDescripcion": "Corte de cesped y poda",
+              "nombre": "Juan Carlos",
+              "apellido": "Perez",
+              "imagen": "https://example.com/avatars/juan.png"
+            },
+            {
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-03 10:00:00",
+              "estado": "completado",
+              "precio": "1500.00",
+              "titulo": "Plomeria a domicilio",
+              "paymentId": null,
+              "servicioTitulo": "Plomeria express",
+              "servicioDescripcion": "Reparaciones",
+              "nombre": "Juan Carlos",
+              "apellido": "Perez",
+              "imagen": "https://example.com/avatars/juan.png"
+            },
+            {
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-02 10:00:00",
+              "estado": "pendiente",
+              "precio": "1500.00",
+              "titulo": "Plomeria a domicilio",
+              "paymentId": null,
+              "servicioTitulo": "Plomeria express",
+              "servicioDescripcion": "Reparaciones",
+              "nombre": "Juan Carlos",
+              "apellido": "Perez",
+              "imagen": "https://example.com/avatars/juan.png"
+            },
+            {
+              "idCliente": 1,
+              "idServicio": 1,
+              "idProveedor": 2,
+              "fechaPago": "2026-10-01 10:00:00",
+              "estado": "pendiente",
+              "precio": "1500.00",
+              "titulo": "Plomeria a domicilio",
+              "paymentId": null,
+              "servicioTitulo": "Plomeria express",
+              "servicioDescripcion": "Reparaciones",
+              "nombre": "Juan Carlos",
+              "apellido": "Perez",
+              "imagen": "https://example.com/avatars/juan.png"
+            }
+          ],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoMp.noTokens",
+      "operationId": "pagoMp",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/mp",
+        "headers": {},
+        "query": {
+          "precio": 100,
+          "titulo": "X",
+          "idProveedor": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "El proveedor no tiene tokens de MercadoPago configurados. Debe vincular su cuenta primero.",
+          "code": 500
+        }
+      },
+      "note": "Provider has no MercadoPago tokens: business error as HTTP 500."
+    },
+    {
+      "id": "pagoMp.missing",
+      "operationId": "pagoMp",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/mp",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios: precio y titulo",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoMp.price0",
+      "operationId": "pagoMp",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/mp",
+        "headers": {},
+        "query": {
+          "precio": 0,
+          "titulo": "X",
+          "idProveedor": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Precio inválido",
+          "code": 400
+        }
+      },
+      "note": "0 passes the undefined check and is rejected as 'Precio inválido'."
+    },
+    {
+      "id": "pagoVerificar.true",
+      "operationId": "pagoVerificarContratacion",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/verificarContratacion",
+        "headers": {},
+        "query": {
+          "idCliente": 1,
+          "idServicio": 1
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Verificación completada",
+          "data": {
+            "contratado": true
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoVerificar.false",
+      "operationId": "pagoVerificarContratacion",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/verificarContratacion",
+        "headers": {},
+        "query": {
+          "idCliente": 1,
+          "idServicio": 2
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Verificación completada",
+          "data": {
+            "contratado": false
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoVerificar.missing",
+      "operationId": "pagoVerificarContratacion",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/verificarContratacion",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios: idCliente, idServicio",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoCallback.noCode",
+      "operationId": "pagoCallback",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/callback",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "No se recibió el authorization code",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoCallback.code",
+      "operationId": "pagoCallback",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/callback",
+        "headers": {},
+        "query": {
+          "code": "fake_code"
+        },
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Could not resolve host: api.mercadopago.com (Could not contact DNS servers)",
+          "code": 500
+        }
+      },
+      "note": "MercadoPago is unreachable; the cURL error message is returned as HTTP 500. The successful 302 is documented as a separate LEÍDO case."
+    },
+    {
+      "id": "pagoPagar.ok",
+      "operationId": "pagoPagar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/pago/pagar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "idProveedor": "2",
+            "precio": "1500",
+            "titulo": "Plomeria"
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Pago guardado exitosamente",
+          "data": {
+            "funciono": true
+          },
+          "code": 201
+        }
+      }
+    },
+    {
+      "id": "pagoPagar.missing",
+      "operationId": "pagoPagar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/pago/pagar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios o están vacíos",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoPagar.price0",
+      "operationId": "pagoPagar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/pago/pagar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "idProveedor": "2",
+            "precio": "0",
+            "titulo": "X"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios o están vacíos",
+          "code": 400
+        }
+      },
+      "note": "Price exactly 0 hits the empty() check first: 'Faltan datos obligatorios o están vacíos'."
+    },
+    {
+      "id": "pagoPagar.badClient",
+      "operationId": "pagoPagar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/pago/pagar",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "idCliente": "999",
+            "idServicio": "1",
+            "idProveedor": "2",
+            "precio": "100",
+            "titulo": "X"
+          }
+        }
+      },
+      "expected": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "Unknown client -> uncaught PDOException -> HTTP 500 with empty body."
+    },
+    {
+      "id": "pagoSaveTokens.missingId",
+      "operationId": "pagoSaveTokens",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/pago/saveTokens",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "access_token": "a",
+            "refresh_token": "r"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Falta el ID del proveedor",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoSaveTokens.missingTokens",
+      "operationId": "pagoSaveTokens",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/pago/saveTokens",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "id_proveedor": "2"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan los tokens",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoSaveTokens.ok",
+      "operationId": "pagoSaveTokens",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/pago/saveTokens",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "id_proveedor": "2",
+            "access_token": "APP_USR-fake-access",
+            "refresh_token": "TG-fake-refresh",
+            "public_key": "APP_USR-fake-public"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Tokens guardados correctamente",
+          "data": [],
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoConfirm.ok",
+      "operationId": "pagoConfirmarPago",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/confirmar-pago",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "fechaPago": "2026-10-01 10:00:00",
+            "paymentId": "MP-123",
+            "estado": "completado"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Pago confirmado exitosamente",
+          "data": {
+            "success": true,
+            "message": "Pago confirmado con estado: completado",
+            "paymentId": "MP-123"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoConfirm.missing",
+      "operationId": "pagoConfirmarPago",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/confirmar-pago",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Faltan datos obligatorios: idCliente, idServicio, fechaPago, paymentId",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoCancel.ok",
+      "operationId": "pagoCancelar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/cancelar",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "fechaPago": "2026-10-02 10:00:00"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Compra cancelada exitosamente",
+          "data": {
+            "success": true,
+            "message": "Pago cancelado localmente (no procesado por MercadoPago)"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoCancel.already",
+      "operationId": "pagoCancelar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/cancelar",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "fechaPago": "2026-10-02 10:00:00"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "El pago ya está cancelado",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoApprove.ok",
+      "operationId": "pagoAprobar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/aprobar",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1",
+            "idServicio": "2",
+            "fechaPago": "2026-10-04 10:00:00"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Pago aprobado exitosamente",
+          "data": {
+            "success": true,
+            "message": "Pago aprobado localmente (no procesado por MercadoPago)"
+          },
+          "code": 200
+        }
+      }
+    },
+    {
+      "id": "pagoApprove.already",
+      "operationId": "pagoAprobar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/aprobar",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1",
+            "idServicio": "2",
+            "fechaPago": "2026-10-04 10:00:00"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "El pago ya está aprobado",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoApprove.completed",
+      "operationId": "pagoAprobar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/aprobar",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "fechaPago": "2026-10-03 10:00:00"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "El pago ya está aprobado",
+          "code": 400
+        }
+      }
+    },
+    {
+      "id": "pagoCancel.withPaymentId",
+      "operationId": "pagoCancelar",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/cancelar",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {
+            "idCliente": "1",
+            "idServicio": "1",
+            "fechaPago": "2026-10-01 10:00:00"
+          }
+        }
+      },
+      "expected": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Error al procesar el reembolso en MercadoPago: Error de conexión: Could not resolve host: api.mercadopago.com (Could not contact DNS servers)",
+          "code": 400
+        }
+      },
+      "note": "paymentId present -> the route tries a real MercadoPago refund; with the network blocked the refund error is a 400."
+    },
+    {
+      "id": "pagoUnknown.get",
+      "operationId": "pagoHistorialCliente",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/foo",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "Unknown GET action under /pago -> 200 with empty body."
+    },
+    {
+      "id": "pagoUnknown.put",
+      "operationId": "pagoConfirmarPago",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "PUT",
+        "path": "/pago/foo",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "type": "json",
+          "json": {}
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      },
+      "note": "Unknown PUT action -> 404."
+    },
+    {
+      "id": "adminVerifyPassword",
+      "operationId": "adminVerifyPassword",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/admin/verifyPassword",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "password": "test_admin_password"
+          }
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      },
+      "note": "Actual behavior today: /admin is not routed, so 404. The Admin.php logic is documented as LEÍDO in openapi.yaml."
+    },
+    {
+      "id": "adminRegister",
+      "operationId": "adminRegister",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/admin/register",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "tipo": "Moderador",
+            "email": "m@example.com",
+            "nombre": "M",
+            "apellido": "X",
+            "password": "abc",
+            "fecha_nacimiento": "1990-01-01"
+          }
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "adminUserList",
+      "operationId": "adminUserList",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/admin/userList",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "adminDeleteUser",
+      "operationId": "adminDeleteUser",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/admin/deleteUser",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "id": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "adminReviewModify",
+      "operationId": "adminReviewModify",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/admin/reviewModify",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "id": "1",
+            "comentario": "x",
+            "calificacion": "3"
+          }
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "adminServiceList",
+      "operationId": "adminServiceList",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/admin/serviceList",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "adminDeleteService",
+      "operationId": "adminDeleteService",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/admin/deleteService",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "id": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "adminReviewList",
+      "operationId": "adminReviewList",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/admin/reviewList",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "adminDeleteReview",
+      "operationId": "adminDeleteReview",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "POST",
+        "path": "/admin/deleteReview",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "body": {
+          "type": "form",
+          "fields": {
+            "id": "1"
+          }
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      }
+    },
+    {
+      "id": "pagoCallback.success",
+      "operationId": "pagoCallback",
+      "evidence": "LEÍDO",
+      "request": {
+        "method": "GET",
+        "path": "/pago/callback",
+        "query": {
+          "code": "<real-mercadopago-code>"
+        },
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 302,
+        "headers": {
+          "location": "https://jobifyuy.app/confirm?requestId=<access_token>&requestType=<refresh_token>&publicKey=<public_key>"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "Not reproducible with fake credentials: requires a real MercadoPago OAuth code. Tokens travel in the Location URL (QUIRKS Q50).",
+      "needs_mock": "MercadoPago OAuth token endpoint"
+    },
+    {
+      "id": "servicioCrear.cloudinarySuccess",
+      "operationId": "serviciosCrear",
+      "evidence": "LEÍDO",
+      "request": {
+        "method": "POST",
+        "path": "/servicios/crear",
+        "headers": {},
+        "body": {
+          "type": "multipart",
+          "fields": {
+            "idProveedor": "2",
+            "nombre": "Jardineria",
+            "descripcion": "Corte de pasto",
+            "categoria[]": [
+              "Jardineria"
+            ],
+            "ubicacion[]": [
+              "Montevideo"
+            ],
+            "precio": "2000",
+            "diasDisponibles[]": [
+              "Lunes"
+            ]
+          },
+          "files": {
+            "fotoServicio[]": [
+              "docs/api/fixtures/pixel.png"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": true,
+          "message": "Servicio creado exitosamente",
+          "data": {
+            "id": "<id>"
+          },
+          "code": 201
+        }
+      },
+      "note": "With a working Cloudinary the image row gets a transformed URL instead of 'Array'. Not reproducible without a mock.",
+      "needs_mock": "Cloudinary upload API"
+    }
+  ],
+  "routingCases": [
+    {
+      "id": "routingOptions",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "OPTIONS",
+        "path": "/usuario/login",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": null,
+        "body_is_empty": true
+      },
+      "note": "PHP-only OPTIONS: 200 empty; nginx answers 204 before PHP."
+    },
+    {
+      "id": "routingRoot",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "status": "API funcionando"
+        }
+      },
+      "note": "Index root message, not an envelope."
+    },
+    {
+      "id": "routingUnknownPrefix",
+      "evidence": "EJECUTADO",
+      "request": {
+        "method": "GET",
+        "path": "/nope",
+        "headers": {},
+        "body": {
+          "type": "none"
+        }
+      },
+      "expected": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "success": false,
+          "message": "Ruta no encontrada",
+          "code": 404
+        }
+      },
+      "note": ""
+    }
+  ]
+}
