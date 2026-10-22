@@ -1,0 +1,5583 @@
+openapi: 3.1.0
+info:
+  title: Jobify Legacy API
+  version: 1.0.0
+  description: 'Current HTTP contract of the Jobify PHP backend, documented as it behaves today (quirks included), not as it should behave. A
+    replacement backend must reproduce this behavior unless a product decision says otherwise.
+
+
+    ## Evidence labels
+
+
+    Every operation carries `x-evidence`:
+
+    - `EJECUTADO`: verified with a real HTTP request against the legacy backend running locally (see DUDAS.md for the harness).
+
+    - `LEÍDO`: deduced only from the source code; not exercised (external services that need real credentials, unreachable branches, or responses
+    that require a real provider).
+
+
+    `x-source` points to the route file and line where the action is dispatched.
+
+
+    ## Routing reality
+
+
+    `backend/index.php` routes only these prefixes: `/usuario`, `/servicios`, `/chat`, `/review`, `/reserva`, `/pago`. The action is always the
+    third URL segment (`Ruta[2]`); there is no router parameter, no trailing-slash normalization and no method override.
+
+
+    - `/admin/*` is **not routed** (there is no `admin` case), so every admin request returns 404 `Ruta no encontrada`. `backend/src/routes/Admin.php`
+    is documented with `x-routed: false` for the future backend.
+
+    - `GET /` returns `{"status":"API funcionando"}`.
+
+    - Any unknown first segment returns 404 `Ruta no encontrada`.
+
+    - `OPTIONS` is answered by nginx with 204 before PHP; without nginx, index.php returns 200 with an empty body.
+
+
+    ## Response envelopes
+
+
+    Success (`Response::success`): HTTP status + JSON `{"success":true,"message":string,"data":<object|array|string>,"code":<status>}` and `exit`.
+
+    Error (`Response::error`): HTTP status + `{"success":false,"message":string,"code":<status>}` plus optional `"error":<string>` and `exit`.
+
+    Not found (`Response::notFound`): HTTP 404 + `{"success":false,"message":"Ruta no encontrada","code":404}` and `exit`.
+
+
+    `Content-Type: application/json` is set once in index.php for every response, including empty ones. There is no `charset` parameter. PHP warnings
+    are hidden (`display_errors=0`), so malformed input often produces a fatal error rendered as HTTP 500 with an empty body rather than a JSON
+    envelope.
+
+
+    ## Security model
+
+
+    There is no authentication, authorization, session, cookie or token check anywhere. Identities (`idUsuario`, `idProveedor`, `idCliente`, `idEmisor`)
+    are accepted from the body/query and trusted. Login is a GET with the password in the query string. The MercadoPago OAuth callback puts both
+    OAuth tokens in a redirect URL to a hardcoded host (`https://jobifyuy.app/confirm`).
+
+
+    ## Content types
+
+
+    Only the endpoints that read `php://input` accept JSON (the three `/pago` PUTs and `/admin/verifyPassword`, `/admin/register`). All other
+    write endpoints read `$_POST`/`$_FILES` and therefore require `application/x-www-form-urlencoded` or `multipart/form-data`; sending JSON to
+    them silently produces "missing data" errors. Query parameters are read directly from `$_GET` with `?? null` in most places, but a few use
+    `$_GET[...]` without `??`, which logs a warning and then fails validation.
+
+
+    ## CORS and proxy headers [LEÍDO]
+
+
+    `backend/nginx.conf` reflects the request `Origin` into `Access-Control-Allow-Origin`, allows credentials, and adds security headers. The
+    built-in execution harness used for `EJECUTADO` evidence does not run nginx, so CORS headers are absent from recorded responses; they are
+    a deployment concern, not an application behavior.
+
+    '
+  license:
+    name: Proprietary (academic project, no license file in repository)
+servers:
+- url: http://localhost:8081
+  description: Backend container/port (BACKEND_PORT default 8081).
+tags:
+- name: usuario
+  description: 'Registration, GET login, profile and password. Sources: backend/src/routes/Usuario.php -> controller/Usuario.php -> model/Usuario.php.'
+- name: servicios
+  description: 'Service catalogue, creation/update/delete, favorites, search and Groq-backed IA search. Source: backend/src/routes/Servicio.php.'
+- name: chat
+  description: 'Threads (Contacta) and messages (Contacta_Mensaje). Source: backend/src/routes/Chat.php.'
+- name: review
+  description: 'Reviews (Resena + Publica). Source: backend/src/routes/Resena.php.'
+- name: reserva
+  description: 'Reservations (Contrata). Source: backend/src/routes/Reserva.php.'
+- name: pago
+  description: 'Payments (Pagos), MercadoPago OAuth/tokens/checkout/refund/capture. Source: backend/src/routes/Pago.php.'
+- name: admin
+  description: 'Admin route file NOT included by index.php: all these requests return 404 today. Source: backend/src/routes/Admin.php.'
+security: []
+paths:
+  /usuario/login:
+    get:
+      tags:
+      - usuario
+      summary: Log in by sending e-mail and password in the query string
+      description: 'Reads `$_GET[''email'']` and `$_GET[''password'']` directly (no `?? null`), so a missing key raises an ''Undefined array key''
+        warning that is hidden by `display_errors=0`. The password travels in the URL and therefore in access logs, proxies and browser history.
+        There is no session, token or cookie: the response only contains the user id, name and avatar. Wrong password and unknown e-mail both
+        return HTTP 500 (business errors are not mapped to 4xx). The controller''s ''Usuario no encontrado'' branch is unreachable because `PDO::fetch()`
+        returns `false`, not `null`.'
+      operationId: usuarioLogin
+      x-source: backend/src/routes/Usuario.php:154
+      x-evidence: EJECUTADO
+      parameters:
+      - name: email
+        in: query
+        required: true
+        schema:
+          type: string
+        description: User e-mail. Required by the effective validation (missing -> 400).
+        example: juan@example.com
+      - name: password
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Plain-text password. Required (missing -> 400).
+        example: cliente123
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/LoginData'
+              example:
+                success: true
+                message: Login exitoso
+                data:
+                  id: 1
+                  nombre: Juan
+                  foto_perfil: https://example.com/avatars/juan.png
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Wrong password or unknown e-mail (both observed as HTTP 500).
+          content:
+            application/json:
+              example:
+                success: false
+                message: Credenciales incorrectas
+                code: 500
+      x-quirks:
+      - Q01
+      - Q02
+      - Q03
+  /usuario/register:
+    post:
+      tags:
+      - usuario
+      summary: Register a client or a provider
+      description: 'Accepts `multipart/form-data` or `application/x-www-form-urlencoded`; values are read from `$_POST`, the avatar from `$_FILES[''foto_perfil'']`.
+        `es_proveedor` is truthy for the strings ''true''/''1''. Provider registration additionally requires `nombre_empresa`, `descripcion`,
+        `habilidades` and `experiencia`; `titulos` is optional. The avatar is optional: if absent or if Cloudinary fails, a DiceBear URL is stored.
+        Provider moderation calls Google Perspective; failures are silently ignored because the result is a JSON string and `isset($string[''error''])`
+        is false. When `habilidades` is sent as a plain string (not `habilidades[]`), `implode()` throws an uncaught TypeError and the response
+        is HTTP 500 with an empty body. Any controller error is returned as HTTP 500.'
+      operationId: usuarioRegister
+      x-source: backend/src/routes/Usuario.php:13
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: '`foto_perfil` is a file; all other fields are normal form fields. Send `habilidades[]` and `titulos[]` with brackets.'
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                apellido:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                fecha_nacimiento:
+                  type: string
+                  format: date
+                telefono:
+                  type: string
+                foto_perfil:
+                  type: string
+                  format: binary
+                es_proveedor:
+                  type: string
+                  enum:
+                  - 'true'
+                  - 'false'
+                  - '1'
+                  - '0'
+                nombre_empresa:
+                  type: string
+                descripcion:
+                  type: string
+                habilidades[]:
+                  description: Array form `habilidades[]`; a scalar string crashes with a TypeError.
+                  oneOf:
+                  - type: array
+                    items:
+                      type: string
+                  - type: string
+                experiencia:
+                  type: string
+                titulos[]:
+                  description: Array form `titulos[]`.
+                  oneOf:
+                  - type: array
+                    items:
+                      type: string
+                  - type: string
+              required:
+              - nombre
+              - apellido
+              - email
+              - password
+              - fecha_nacimiento
+            example:
+              nombre: Luis
+              apellido: Sosa
+              email: luis@example.com
+              password: Clave123!
+              fecha_nacimiento: '1990-01-01'
+              telefono: '+59899555555'
+              es_proveedor: 'true'
+              nombre_empresa: Sosa Fix
+              descripcion: Electricidad
+              experiencia: '3'
+              habilidades[]:
+              - Electricidad
+              titulos[]:
+              - Tecnico
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                apellido:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                fecha_nacimiento:
+                  type: string
+                  format: date
+                telefono:
+                  type: string
+                foto_perfil:
+                  type: string
+                  format: binary
+                es_proveedor:
+                  type: string
+                  enum:
+                  - 'true'
+                  - 'false'
+                  - '1'
+                  - '0'
+                nombre_empresa:
+                  type: string
+                descripcion:
+                  type: string
+                habilidades[]:
+                  description: Array form `habilidades[]`; a scalar string crashes with a TypeError.
+                  oneOf:
+                  - type: array
+                    items:
+                      type: string
+                  - type: string
+                experiencia:
+                  type: string
+                titulos[]:
+                  description: Array form `titulos[]`.
+                  oneOf:
+                  - type: array
+                    items:
+                      type: string
+                  - type: string
+              required:
+              - nombre
+              - apellido
+              - email
+              - password
+              - fecha_nacimiento
+            example:
+              nombre: Luis
+              apellido: Sosa
+              email: luis@example.com
+              password: Clave123!
+              fecha_nacimiento: '1990-01-01'
+              telefono: '+59899555555'
+              es_proveedor: 'true'
+              nombre_empresa: Sosa Fix
+              descripcion: Electricidad
+              experiencia: '3'
+              habilidades[]:
+              - Electricidad
+              titulos[]:
+              - Tecnico
+      responses:
+        '201':
+          description: Usuario registrado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/RegisterData'
+              example:
+                success: true
+                message: Usuario registrado exitosamente
+                data:
+                  id: '4'
+                code: 200
+        '400':
+          description: 'One of nombre/apellido/email/password/fecha_nacimiento missing. Other 400s: ''El nombre no puede contener números'', ''El
+            apellido no puede contener números'', blacklist message, ''Faltan datos obligatorios para el registro como proveedor''.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 400
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Business/DB errors, including duplicate e-mail (raw SQLSTATE text as message) and experience/age incoherence. Also 500
+            with an empty body on the string-habilidades TypeError.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Debes tener al menos 18 años para registrarte
+                code: 500
+      x-quirks:
+      - Q04
+      - Q05
+      - Q06
+      - Q07
+      x-needs-mock: true
+      x-mock-target: Cloudinary (avatar upload), Google Perspective (moderation)
+  /usuario/updateProfile:
+    post:
+      tags:
+      - usuario
+      summary: Update a user profile (identity comes from the body)
+      description: '`idUsuario` is the only required field and is trusted as-is: there is no authentication, so any caller can update any profile.
+        Omitted fields keep their current value. When `es_proveedor` is truthy, `nombre_empresa` or `descripcion` must be present, the provider
+        row must exist, and `habilidades`/`titulos` arrays replace the previous rows. Sending `telefono` deletes all previous phone rows and inserts
+        the new one. A non-existent `idUsuario` returns ''El usuario debe tener al menos 18 años'' because `fetch()` returns `false`, `new DateTime(null)`
+        becomes today, and the computed age is 0.'
+      operationId: usuarioUpdateProfile
+      x-source: backend/src/routes/Usuario.php:66
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idUsuario:
+                  type: string
+                nombre:
+                  type: string
+                apellido:
+                  type: string
+                email:
+                  type: string
+                telefono:
+                  type: string
+                foto_perfil:
+                  type: string
+                  format: binary
+                es_proveedor:
+                  type: string
+                nombre_empresa:
+                  type: string
+                descripcion:
+                  type: string
+                habilidades[]:
+                  type: array
+                  items:
+                    type: string
+                experiencia:
+                  type: string
+                titulos[]:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - idUsuario
+            example:
+              idUsuario: '2'
+              nombre: Maria
+              apellido: Gomez
+              email: maria@example.com
+              es_proveedor: 'true'
+              nombre_empresa: Gomez Pro
+              descripcion: Plomeria
+              experiencia: '6'
+              habilidades[]:
+              - Gas
+              - Agua
+              titulos[]:
+              - Certificado
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idUsuario:
+                  type: string
+                nombre:
+                  type: string
+                apellido:
+                  type: string
+                email:
+                  type: string
+                telefono:
+                  type: string
+                foto_perfil:
+                  type: string
+                  format: binary
+                es_proveedor:
+                  type: string
+                nombre_empresa:
+                  type: string
+                descripcion:
+                  type: string
+                habilidades[]:
+                  type: array
+                  items:
+                    type: string
+                experiencia:
+                  type: string
+                titulos[]:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - idUsuario
+            example:
+              idUsuario: '2'
+              nombre: Maria
+              apellido: Gomez
+              email: maria@example.com
+              es_proveedor: 'true'
+              nombre_empresa: Gomez Pro
+              descripcion: Plomeria
+              experiencia: '6'
+              habilidades[]:
+              - Gas
+              - Agua
+              titulos[]:
+              - Certificado
+      responses:
+        '200':
+          description: Perfil actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/UpdateProfileData'
+              example:
+                success: true
+                message: Perfil actualizado exitosamente
+                data:
+                  success: true
+                  mensaje: Perfil actualizado correctamente
+                code: 200
+        '400':
+          description: Also 400 for digits in nombre/apellido, blacklist text, or missing provider fields ('Para actualizar un proveedor, debe
+            proporcionar al menos nombre de empresa o descripción').
+          content:
+            application/json:
+              example:
+                success: false
+                message: Falta el ID de usuario
+                code: 400
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: 'Business errors are 500: non-existent id yields the age message; provider update failure; moderation; Cloudinary failure.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: El usuario no es un proveedor
+                code: 500
+      x-quirks:
+      - Q08
+      - Q09
+      x-needs-mock: true
+      x-mock-target: Cloudinary (avatar), Google Perspective (provider moderation)
+  /usuario/updatePassword:
+    post:
+      tags:
+      - usuario
+      summary: Change a password knowing the current one
+      description: Identity is again `idUsuario` from the body; the only proof is `passwordActual`. All three fields are required. Business failures
+        return 500.
+      operationId: usuarioUpdatePassword
+      x-source: backend/src/routes/Usuario.php:135
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idUsuario:
+                  type: string
+                passwordActual:
+                  type: string
+                nuevoPassword:
+                  type: string
+              required:
+              - idUsuario
+              - passwordActual
+              - nuevoPassword
+            example:
+              idUsuario: '1'
+              passwordActual: cliente123
+              nuevoPassword: nuevo123
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idUsuario:
+                  type: string
+                passwordActual:
+                  type: string
+                nuevoPassword:
+                  type: string
+              required:
+              - idUsuario
+              - passwordActual
+              - nuevoPassword
+            example:
+              idUsuario: '1'
+              passwordActual: cliente123
+              nuevoPassword: nuevo123
+      responses:
+        '200':
+          description: Contraseña actualizada exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/UpdatePasswordData'
+              example:
+                success: true
+                message: Contraseña actualizada exitosamente
+                data:
+                  success: true
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Also 500 'Usuario no encontrado' or 'No se pudo actualizar la contraseña'.
+          content:
+            application/json:
+              example:
+                success: false
+                message: La contraseña actual es incorrecta
+                code: 500
+      x-quirks:
+      - Q09
+  /usuario/getUser:
+    get:
+      tags:
+      - usuario
+      summary: Get one user by id (or nothing)
+      description: 'Without `id` the controller returns an error, which the route maps to HTTP 500. The response shape branches on whether the
+        id exists in `Proveedor`: providers get provider fields plus average rating; clients get the minimal shape. `fecha_nacimiento` is renamed
+        from `fechaNac`; `foto_perfil` from `imagen`. Provider `habilidades`/`titulos` are raw rows (`{idProveedor, habilidad}`), not plain strings.'
+      operationId: usuarioGetUser
+      x-source: backend/src/routes/Usuario.php:167
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: false
+        schema:
+          type: integer
+        description: User id. Optional in the route, but omitting it returns HTTP 500.
+        example: 1
+      responses:
+        '200':
+          description: Client or provider profile.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UsuarioClientData'
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UsuarioProviderData'
+              examples:
+                client:
+                  value:
+                    success: true
+                    message: Usuario encontrado
+                    data:
+                      id: 1
+                      nombre: Juan
+                      apellido: Perez
+                      email: juan@example.com
+                      fecha_nacimiento: '1990-01-01'
+                      foto_perfil: https://example.com/avatars/juan.png
+                      telefono: '+59899111111'
+                      esProveedor: false
+                    code: 200
+                provider:
+                  value:
+                    success: true
+                    message: Usuario encontrado
+                    data:
+                      id: 2
+                      nombre: Maria
+                      apellido: Gomez
+                      email: maria@example.com
+                      fecha_nacimiento: '1985-05-05'
+                      foto_perfil: https://example.com/avatars/maria.png
+                      telefono: '+59899222222'
+                      nombre_empresa: Gomez Servicios
+                      descripcion: Plomeria y reparaciones generales
+                      experiencia: 5
+                      habilidades: []
+                      titulos: []
+                      esProveedor: true
+                      registroMp: false
+                      calificacionPromedio: 5
+                      totalResenas: 1
+                    code: 200
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Also 'ID de usuario no proporcionado' when id is absent.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Usuario no encontrado
+                code: 500
+      x-quirks:
+      - Q10
+      - Q11
+  /servicios/getServicio:
+    get:
+      tags:
+      - servicios
+      summary: Get one service by id, or the whole catalogue
+      description: 'With `id` it returns one detailed service (images/categories/locations/days as string arrays). Without `id` it returns the
+        catalogue, each item with `imagen` (first image or `[]`), computed review average and provider first name. An unknown id returns 500 with
+        detail ''Servicio no encontrado'': the route checks `$data === null` for 404 but the controller returns an error array, so the 404 branch
+        is unreachable. An empty catalogue also returns 500, with detail ''No se encontraron servicios''. Every returned field comes from a separate
+        query per item (N+1).'
+      operationId: serviciosGetServicio
+      x-source: backend/src/routes/Servicio.php:131
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: false
+        schema:
+          type: integer
+        description: Service id. Omit to list the whole catalogue.
+        example: 1
+      responses:
+        '200':
+          description: One detailed service or the catalogue list.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ServicioDetailData'
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ServicioListItem'
+                    required:
+                    - data
+              examples:
+                detail:
+                  value:
+                    success: true
+                    message: Servicio obtenido exitosamente
+                    data:
+                      id: 1
+                      nombre: Plomeria a domicilio
+                      precio: 1500
+                      idProveedor: 2
+                      descripcion: Reparacion de canerias y griferia
+                      imagenes:
+                      - https://example.com/services/plomeria.jpg
+                      categorias:
+                      - Plomeria
+                      ubicaciones:
+                      - Montevideo
+                      diasDisponibles:
+                      - Lunes
+                      - Miercoles
+                      nombreProveedor: Maria
+                      apellidoProveedor: Gomez
+                      imagenProveedor: https://example.com/avatars/maria.png
+                    code: 200
+                catalogue:
+                  value:
+                    success: true
+                    message: Servicio obtenido exitosamente
+                    data:
+                    - id: 1
+                      nombre: Plomeria a domicilio
+                      precio: 1500
+                      imagen: https://example.com/services/plomeria.jpg
+                      categorias:
+                      - Plomeria
+                      ubicaciones:
+                      - Montevideo
+                      diasDisponibles:
+                      - Lunes
+                      - Miercoles
+                      calificacion: 5
+                      calificaciones: 1
+                      nombre_proveedor: Maria
+                    code: 200
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Unknown id (the route 404 branch is unreachable) and empty catalogue (No se encontraron servicios); also any caught exception.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener el servicio
+                code: 500
+                error: Servicio no encontrado
+      x-quirks:
+      - Q12
+      - Q13
+      - Q71
+    x-other-actions:
+      description: No action match on GET returns 404; other methods return 405.
+  /servicios/search:
+    get:
+      tags:
+      - servicios
+      summary: Search services by title or description
+      description: SQL `LIKE %q%` over `Servicio.titulo` and `Servicio.descripcion`. No pagination, no filters by category/location. No results
+        is a 200 with `data.result` (an object, not an array), not an error. `q` is read with `$_GET['q']` (warning when absent) and the effective
+        check is `isset`, so an empty string is accepted and matches everything.
+      operationId: serviciosSearch
+      x-source: backend/src/routes/Servicio.php:142
+      x-evidence: EJECUTADO
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Search text. Absent -> 400; empty string is allowed.
+        example: plomeria
+      responses:
+        '200':
+          description: Array of matches, or an object with a result message.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ServicioSearchItem'
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ResultMessageData'
+              examples:
+                matches:
+                  value:
+                    success: true
+                    message: Búsqueda realizada exitosamente
+                    data:
+                    - id: 1
+                      nombre: Plomeria a domicilio
+                      precio: 1500
+                      descripcion: Reparacion de canerias y griferia
+                      categorias:
+                      - Plomeria
+                      ubicaciones:
+                      - Montevideo
+                      diasDisponibles:
+                      - Lunes
+                      - Miercoles
+                      imagenes: https://example.com/services/plomeria.jpg
+                    code: 200
+                noResults:
+                  value:
+                    success: true
+                    message: Búsqueda realizada exitosamente
+                    data:
+                      result: No se encontraron servicios que coincidan con la búsqueda
+                    code: 200
+        '400':
+          description: Falta el parámetro de búsqueda
+          content:
+            application/json:
+              example:
+                success: false
+                message: Falta el parámetro de búsqueda
+                code: 400
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al buscar servicios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al buscar servicios
+                code: 500
+      x-quirks:
+      - Q14
+      - Q15
+  /servicios/IA:
+    get:
+      tags:
+      - servicios
+      summary: Search services through Groq (LLM), returning an unparsed string
+      description: 'Builds the whole catalogue and sends it to Groq `openai/gpt-oss-20b`. On success the route wraps the model content under `data.response`
+        as a string. When the key is missing, the network fails or Groq rejects the key, `IA::ChatIA()` returns a JSON-encoded error string; the
+        route''s `isset($data[''error''])` check does not see string offsets, so it still answers 200 with the error text embedded in `data.response`.
+        `pregunta` is read without `??`, and a missing parameter makes `IA::ChatIA(): Argument #2` a TypeError -> HTTP 500 with empty body.'
+      operationId: serviciosIa
+      x-source: backend/src/routes/Servicio.php:155
+      x-evidence: EJECUTADO
+      parameters:
+      - name: pregunta
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Natural-language question. Absent -> fatal 500 (empty body).
+        example: necesito un plomero
+      responses:
+        '200':
+          description: Servicios listados exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/IaResponseData'
+              example:
+                success: true
+                message: Servicios listados exitosamente
+                data:
+                  response: '{"error":{"error":"Could not resolve host: api.groq.com (Could not contact DNS servers)"}}'
+                code: 200
+        '405':
+          description: Only non-POST methods other than GET; GET is the documented one.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Empty body when pregunta is absent (TypeError) or catalogue query fails before the external call.
+          content: {}
+      x-needs-mock: true
+      x-mock-target: Groq chat completions API
+      x-quirks:
+      - Q16
+      - Q17
+  /servicios/getServiciosByProveedor:
+    get:
+      tags:
+      - servicios
+      summary: List all services of a provider
+      description: 'Reads `idProveedor` optionally; a missing/unknown id returns 200 with `data.response.result` (object), while a provider with
+        services returns `data.response` as an array. The route wraps the controller result in `{''response'': ...}`, so clients must unwrap one
+        extra level.'
+      operationId: serviciosByProveedor
+      x-source: backend/src/routes/Servicio.php:164
+      x-evidence: EJECUTADO
+      parameters:
+      - name: idProveedor
+        in: query
+        required: false
+        schema:
+          type: integer
+        description: Provider id; optional.
+        example: 2
+      responses:
+        '200':
+          description: Provider services, or an empty-result object.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ByProviderEmptyData'
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          response:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ServicioSearchItem'
+                        required:
+                        - response
+                    required:
+                    - data
+              examples:
+                list:
+                  value:
+                    success: true
+                    message: Servicios listados exitosamente
+                    data:
+                      response:
+                      - id: 1
+                        nombre: Plomeria a domicilio
+                        precio: 1500
+                        descripcion: Reparacion de canerias y griferia
+                        categorias:
+                        - Plomeria
+                        ubicaciones:
+                        - Montevideo
+                        diasDisponibles:
+                        - Lunes
+                        - Miercoles
+                        imagenes: https://example.com/services/plomeria.jpg
+                    code: 200
+                empty:
+                  value:
+                    success: true
+                    message: Servicios listados exitosamente
+                    data:
+                      response:
+                        result: No se encontraron servicios para el proveedor dado
+                    code: 200
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al listar servicios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al listar servicios
+                code: 500
+      x-quirks:
+      - Q18
+  /servicios/getFavoritos:
+    get:
+      tags:
+      - servicios
+      summary: List a client's favorite services
+      description: Validates that the user exists and is in `Cliente`; otherwise returns 500. No favorites yields 200 with `data.isFavorito=false`
+        and `data.result` at the top level (not wrapped in `response`). Favorites yield `data.response` as an array of items with `isFavorito=true`.
+      operationId: serviciosGetFavoritos
+      x-source: backend/src/routes/Servicio.php:173
+      x-evidence: EJECUTADO
+      parameters:
+      - name: idCliente
+        in: query
+        required: false
+        schema:
+          type: integer
+        description: Client id; omitting it produces 500 'Cliente no encontrado'.
+        example: 1
+      responses:
+        '200':
+          description: Favorites array or an empty marker.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FavoritosEmptyData'
+                - allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          response:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/FavoritoItem'
+                        required:
+                        - response
+                    required:
+                    - data
+              examples:
+                list:
+                  value:
+                    success: true
+                    message: Favoritos listados exitosamente
+                    data:
+                      response:
+                      - isFavorito: true
+                        id: 1
+                        nombre: Plomeria a domicilio
+                        precio: 1500
+                        descripcion: Reparacion de canerias y griferia
+                        categorias:
+                        - Plomeria
+                        ubicaciones:
+                        - Montevideo
+                        diasDisponibles:
+                        - Lunes
+                        - Miercoles
+                        imagenes: https://example.com/services/plomeria.jpg
+                    code: 200
+                empty:
+                  value:
+                    success: true
+                    message: Favoritos listados exitosamente
+                    data:
+                      isFavorito: false
+                      result: No se encontraron servicios favoritos para el cliente dado
+                    code: 200
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Also 'El usuario no es un cliente'.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Cliente no encontrado
+                code: 500
+      x-quirks:
+      - Q19
+  /servicios/crear:
+    post:
+      tags:
+      - servicios
+      summary: Create a service with photos
+      description: '`idProveedor`, `nombre`, `descripcion`, `categoria`, `ubicacion`, `precio`, `fotoServicio` and `diasDisponibles` are read
+        from `$_POST`/`$_FILES`. The controller expects `categoria`, `ubicacion`, `diasDisponibles` and `fotoServicio` to be arrays; the frontend
+        sends `categoria[]`, `ubicacion[]`, `diasDisponibles[]`, `fotoServicio[]`. Without brackets, `count()` on a string throws a TypeError
+        -> HTTP 500 with empty body; with brackets but Cloudinary unavailable, the upload returns an error array that is truthy and is bound to
+        SQL as the literal string ''Array''. The service row is inserted before images/categories/locations/days, so failures leave partial data.
+        A price above 500000 returns a 500 with a contact e-mail message.'
+      operationId: serviciosCrear
+      x-source: backend/src/routes/Servicio.php:12
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: Multipart only for a real photo; `fotoServicio[]` MUST use brackets.
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idProveedor:
+                  type: string
+                nombre:
+                  type: string
+                descripcion:
+                  type: string
+                categoria[]:
+                  type: array
+                  items:
+                    type: string
+                ubicacion[]:
+                  type: array
+                  items:
+                    type: string
+                precio:
+                  type: string
+                fotoServicio[]:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                diasDisponibles[]:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - idProveedor
+              - nombre
+              - descripcion
+              - categoria[]
+              - ubicacion[]
+              - precio
+              - fotoServicio[]
+              - diasDisponibles[]
+            example:
+              idProveedor: '2'
+              nombre: Jardineria
+              descripcion: Corte de pasto
+              categoria[]:
+              - Jardineria
+              ubicacion[]:
+              - Montevideo
+              precio: '2000'
+              diasDisponibles[]:
+              - Lunes
+              fotoServicio[]:
+              - pixel.png
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idProveedor:
+                  type: string
+                nombre:
+                  type: string
+                descripcion:
+                  type: string
+                categoria[]:
+                  type: array
+                  items:
+                    type: string
+                ubicacion[]:
+                  type: array
+                  items:
+                    type: string
+                precio:
+                  type: string
+                fotoServicio[]:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                diasDisponibles[]:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - idProveedor
+              - nombre
+              - descripcion
+              - categoria[]
+              - ubicacion[]
+              - precio
+              - fotoServicio[]
+              - diasDisponibles[]
+            example:
+              idProveedor: '2'
+              nombre: Jardineria
+              descripcion: Corte de pasto
+              categoria[]:
+              - Jardineria
+              ubicacion[]:
+              - Montevideo
+              precio: '2000'
+              diasDisponibles[]:
+              - Lunes
+              fotoServicio[]:
+              - pixel.png
+      responses:
+        '201':
+          description: Servicio creado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ServicioCreatedData'
+              example:
+                success: true
+                message: Servicio creado exitosamente
+                data:
+                  id: '2'
+                code: 200
+        '400':
+          description: Any of the eight fields missing (single file without [] is not 'missing', it crashes later).
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Business error ('El precio no puede ser negativo', price limit, moderation, 'Proveedor no encontrado', Cloudinary error)
+            or empty body on TypeError.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al crear el servicio
+                code: 500
+                error: Proveedor no encontrado
+      x-needs-mock: true
+      x-mock-target: Cloudinary upload API
+      x-quirks:
+      - Q20
+      - Q21
+      - Q22
+      - Q23
+    x-unsupported-methods:
+      description: DELETE, PUT, PATCH and other methods hit the route's default branch and return 405 'Método no permitido' (JSON). Unknown sub-actions
+        return 404 'Ruta no encontrada'.
+  /servicios/updateServicio:
+    post:
+      tags:
+      - servicios
+      summary: Update a service (only idServicio is required)
+      description: Only `idServicio` is validated. Every omitted column is written as NULL by `UPDATE Servicio SET titulo=:titulo, descripcion=:descripcion,
+        precio=:precio`, so posting just `idServicio` erases the title, description and price. `imagenesExistentes[]` keeps listed images, `fotoServicio[]`
+        uploads new ones; if Cloudinary fails, the new image is skipped (unlike create). Categories/locations/days are replaced only when the
+        corresponding parameter is present.
+      operationId: serviciosUpdateServicio
+      x-source: backend/src/routes/Servicio.php:42
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                nombre:
+                  type: string
+                descripcion:
+                  type: string
+                categoria[]:
+                  type: array
+                  items:
+                    type: string
+                ubicacion[]:
+                  type: array
+                  items:
+                    type: string
+                precio:
+                  type: string
+                fotoServicio[]:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                imagenesExistentes[]:
+                  type: array
+                  items:
+                    type: string
+                diasDisponibles[]:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - idServicio
+            example:
+              idServicio: '1'
+              nombre: Plomeria express
+              descripcion: Reparaciones
+              precio: '1800'
+              categoria[]:
+              - Plomeria
+              ubicacion[]:
+              - Montevideo
+              diasDisponibles[]:
+              - Martes
+              imagenesExistentes[]:
+              - https://example.com/services/plomeria.jpg
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                nombre:
+                  type: string
+                descripcion:
+                  type: string
+                categoria[]:
+                  type: array
+                  items:
+                    type: string
+                ubicacion[]:
+                  type: array
+                  items:
+                    type: string
+                precio:
+                  type: string
+                fotoServicio[]:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                imagenesExistentes[]:
+                  type: array
+                  items:
+                    type: string
+                diasDisponibles[]:
+                  type: array
+                  items:
+                    type: string
+              required:
+              - idServicio
+            example:
+              idServicio: '1'
+              nombre: Plomeria express
+              descripcion: Reparaciones
+              precio: '1800'
+              categoria[]:
+              - Plomeria
+              ubicacion[]:
+              - Montevideo
+              diasDisponibles[]:
+              - Martes
+              imagenesExistentes[]:
+              - https://example.com/services/plomeria.jpg
+      responses:
+        '200':
+          description: Servicio actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ServicioUpdatedData'
+              example:
+                success: true
+                message: Servicio actualizado exitosamente
+                data:
+                  success: Servicio actualizado correctamente
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+                error: El parámetro idServicio es requerido
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Also price validation, moderation, Cloudinary and controller errors.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Servicio no encontrado
+                code: 500
+      x-needs-mock: true
+      x-mock-target: Cloudinary upload API, Google Perspective
+      x-quirks:
+      - Q24
+      - Q25
+    x-unsupported-methods:
+      description: DELETE, PUT, PATCH and other methods hit the route's default branch and return 405 'Método no permitido' (JSON). Unknown sub-actions
+        return 404 'Ruta no encontrada'.
+  /servicios/saveFavorito:
+    post:
+      tags:
+      - servicios
+      summary: Add a service to a client's favorites
+      description: Both ids come from the body with no authentication. Duplicate favorites return 500 because the controller returns an error.
+        After the 200/500 response the route contains a second, unreachable if/else that would answer 'Servicios listados exitosamente' (dead
+        code copied from another endpoint).
+      operationId: serviciosSaveFavorito
+      x-source: backend/src/routes/Servicio.php:79
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                idCliente:
+                  type: string
+              required:
+              - idServicio
+              - idCliente
+            example:
+              idServicio: '1'
+              idCliente: '1'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                idCliente:
+                  type: string
+              required:
+              - idServicio
+              - idCliente
+            example:
+              idServicio: '1'
+              idCliente: '1'
+      responses:
+        '200':
+          description: Favorito guardado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/FavoritoData'
+              example:
+                success: true
+                message: Favorito guardado exitosamente
+                data:
+                  success: Servicio guardado en favoritos
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+                error: Los parámetros idServicio e idCliente son requeridos
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al guardar el favorito
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al guardar el favorito
+                code: 500
+                error: El servicio ya está en favoritos
+      x-quirks:
+      - Q26
+      - Q27
+    x-unsupported-methods:
+      description: DELETE, PUT, PATCH and other methods hit the route's default branch and return 405 'Método no permitido' (JSON). Unknown sub-actions
+        return 404 'Ruta no encontrada'.
+  /servicios/eliminarFavorito:
+    post:
+      tags:
+      - servicios
+      summary: Remove a service from a client's favorites
+      description: Same body/identity model as saveFavorito. Removing a favorite that does not exist returns 500.
+      operationId: serviciosEliminarFavorito
+      x-source: backend/src/routes/Servicio.php:98
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                idCliente:
+                  type: string
+              required:
+              - idServicio
+              - idCliente
+            example:
+              idServicio: '1'
+              idCliente: '1'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                idCliente:
+                  type: string
+              required:
+              - idServicio
+              - idCliente
+            example:
+              idServicio: '1'
+              idCliente: '1'
+      responses:
+        '200':
+          description: Favorito eliminado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/FavoritoData'
+              example:
+                success: true
+                message: Favorito eliminado exitosamente
+                data:
+                  success: Servicio eliminado de favoritos
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+                error: Los parámetros idServicio e idCliente son requeridos
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al eliminar el favorito
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al eliminar el favorito
+                code: 500
+                error: El servicio no está en favoritos
+      x-quirks:
+      - Q26
+    x-unsupported-methods:
+      description: DELETE, PUT, PATCH and other methods hit the route's default branch and return 405 'Método no permitido' (JSON). Unknown sub-actions
+        return 404 'Ruta no encontrada'.
+  /servicios/borrar:
+    post:
+      tags:
+      - servicios
+      summary: Delete a service if the caller claims to be its provider
+      description: 'Checks that `idProveedor` exists and that the service belongs to it, then deletes images/categories/locations/days and the
+        service. There is no auth: anyone who knows the ids can delete. Other tables (Contrata, Contacta, Pagos, Publica, Cliente_Favorito) disappear
+        through ON DELETE CASCADE. Deleting twice returns 500 ''Servicio no encontrado''.'
+      operationId: serviciosBorrar
+      x-source: backend/src/routes/Servicio.php:112
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                idProveedor:
+                  type: string
+              required:
+              - idServicio
+              - idProveedor
+            example:
+              idServicio: '1'
+              idProveedor: '2'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idServicio:
+                  type: string
+                idProveedor:
+                  type: string
+              required:
+              - idServicio
+              - idProveedor
+            example:
+              idServicio: '1'
+              idProveedor: '2'
+      responses:
+        '200':
+          description: Servicio eliminado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ServicioDeletedData'
+              example:
+                success: true
+                message: Servicio eliminado exitosamente
+                data:
+                  success: Servicio borrado correctamente
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+                error: Los parámetros idServicio e idProveedor son requeridos
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Also 'Proveedor no encontrado' and 'No tienes permisos para borrar este servicio'.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Servicio no encontrado
+                code: 500
+      x-quirks:
+      - Q28
+    x-unsupported-methods:
+      description: DELETE, PUT, PATCH and other methods hit the route's default branch and return 405 'Método no permitido' (JSON). Unknown sub-actions
+        return 404 'Ruta no encontrada'.
+  /chat/send:
+    post:
+      tags:
+      - chat
+      summary: Append a message to a client-service chat
+      description: Ids and message come from the form; no authentication and no check that `idEmisor` participates in the chat. The only validation
+        is non-empty `mensaje`; a non-existent `idCliente` or a foreign-key failure on `idEmisor` both surface as 500 `Este cliente no existe`
+        because the controller catches every exception with that message. Missing fields return 400 with a message that concatenates the received
+        values (an information leak of nulls only).
+      operationId: chatSend
+      x-source: backend/src/routes/Chat.php:12
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                mensaje:
+                  type: string
+                  maxLength: 300
+                idEmisor:
+                  type: string
+              required:
+              - idCliente
+              - idServicio
+              - mensaje
+              - idEmisor
+            example:
+              idCliente: '1'
+              idServicio: '1'
+              mensaje: Hola de nuevo
+              idEmisor: '1'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                mensaje:
+                  type: string
+                  maxLength: 300
+                idEmisor:
+                  type: string
+              required:
+              - idCliente
+              - idServicio
+              - mensaje
+              - idEmisor
+            example:
+              idCliente: '1'
+              idServicio: '1'
+              mensaje: Hola de nuevo
+              idEmisor: '1'
+      responses:
+        '201':
+          description: Mensaje enviado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ChatSendData'
+              example:
+                success: true
+                message: Mensaje enviado exitosamente
+                data:
+                  success: true
+                code: 200
+        '200':
+          description: 'Only for unsupported methods (PUT/DELETE/etc.) on this path: HTTP 200 with an empty body, because the chat router has
+            no default branch.'
+          content: {}
+        '400':
+          description: Literal message concatenates each received value; empty values render as empty strings.
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos. idCliente: 1, idServicio: , mensaje: , idEmisor: '
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Also 500 'Este cliente no existe' for unknown client or bad idEmisor.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al enviar el mensaje
+                code: 500
+                error: El mensaje no puede estar vacío
+      x-quirks:
+      - Q29
+      - Q30
+    x-unsupported-methods:
+      description: The chat router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body (no JSON, no error). POST/GET
+        unknown actions return 404.
+  /chat/crear:
+    post:
+      tags:
+      - chat
+      summary: Create the Contacta row (chat thread) for a client and service
+      description: 'No authentication and no check that the provider actually owns the service. Duplicate `(idCliente,idServicio)` raises a PDOException
+        that the controller swallows into ''Ocurrió un error al crear el chat''. In normal flow this endpoint is not called by the frontend: creating
+        a reservation creates the chat automatically. A success body is `{success: {success: true}}` because the route wraps the boolean in a
+        `success` array key.'
+      operationId: chatCrear
+      x-source: backend/src/routes/Chat.php:26
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                idProveedor:
+                  type: string
+              required:
+              - idCliente
+              - idServicio
+              - idProveedor
+            example:
+              idCliente: '1'
+              idServicio: '2'
+              idProveedor: '2'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                idProveedor:
+                  type: string
+              required:
+              - idCliente
+              - idServicio
+              - idProveedor
+            example:
+              idCliente: '1'
+              idServicio: '2'
+              idProveedor: '2'
+      responses:
+        '201':
+          description: Chat creado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ChatCreateData'
+              example:
+                success: true
+                message: Chat creado exitosamente
+                data:
+                  success: true
+                code: 200
+        '200':
+          description: 'Only for unsupported methods on this path: HTTP 200 with an empty body (no default branch).'
+          content: {}
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Error al crear el chat
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al crear el chat
+                code: 500
+                error: Ocurrió un error al crear el chat
+      x-quirks:
+      - Q31
+    x-unsupported-methods:
+      description: The chat router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body (no JSON, no error). POST/GET
+        unknown actions return 404.
+  /chat/history:
+    get:
+      tags:
+      - chat
+      summary: Read a chat thread and its messages
+      description: The chat row is joined with `Contrata`, so a chat without a reservation is reported as 'El chat no existe'. Ownership is checked
+        only by comparing `idProveedor` from the query with `Contacta.idProveedor`; any caller who knows the three ids can read the thread. Messages
+        are returned in insertion order with no pagination. Note the frontend reads `data.data.messages` but the backend returns `data.messages`.
+      operationId: chatHistory
+      x-source: backend/src/routes/Chat.php:44
+      x-evidence: EJECUTADO
+      parameters:
+      - name: idCliente
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: ''
+      - name: idServicio
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: ''
+      - name: idProveedor
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: ''
+      responses:
+        '200':
+          description: Historial de mensajes obtenido exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ChatHistoryData'
+              example:
+                success: true
+                message: Historial de mensajes obtenido exitosamente
+                data:
+                  chat:
+                    idCliente: 1
+                    idServicio: 1
+                    idProveedor: 2
+                    confirmado: 0
+                    idReserva: 1
+                    imagenCliente: https://example.com/avatars/juan.png
+                    nombreCliente: Juan
+                    apellidoCliente: Perez
+                    imagenProveedor: https://example.com/avatars/maria.png
+                    nombreProveedor: Maria
+                    apellidoProveedor: Gomez
+                  messages:
+                  - idMensaje: 1
+                    idCliente: 1
+                    idServicio: 1
+                    idEmisor: 1
+                    mensaje: Hola, necesito una reparacion
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Also 'El proveedor no tiene acceso a este chat'.
+          content:
+            application/json:
+              example:
+                success: false
+                message: El chat no existe
+                code: 500
+      x-quirks:
+      - Q32
+      - Q33
+    x-unsupported-methods:
+      description: The chat router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body (no JSON, no error). POST/GET
+        unknown actions return 404.
+  /chat/chatsCliente:
+    get:
+      tags:
+      - chat
+      summary: List a client's chat threads
+      description: 'Every row gets `tipo: ''Chat''` prepended. An unknown id is a 200 with an empty array, not an error. `id` is the client id.'
+      operationId: chatChatsCliente
+      x-source: backend/src/routes/Chat.php:57
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Client id.
+      responses:
+        '200':
+          description: Array of chat summaries; [] when none.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/ChatListItem'
+              example:
+                success: true
+                message: Chats del cliente obtenidos exitosamente
+                data:
+                - tipo: Chat
+                  idCliente: 1
+                  idServicio: 1
+                  idProveedor: 2
+                  nombre: Maria
+                  apellido: Gomez
+                  imagen: https://example.com/avatars/maria.png
+                  servicioTitulo: Plomeria a domicilio
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Error al obtener los chats del cliente
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener los chats del cliente
+                code: 500
+      x-quirks:
+      - Q34
+    x-unsupported-methods:
+      description: The chat router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body (no JSON, no error). POST/GET
+        unknown actions return 404.
+  /chat/chatsProveedor:
+    get:
+      tags:
+      - chat
+      summary: List a provider's chat threads
+      description: Symmetric to chatsCliente but joins the client's user row. `id` is the provider id. Unknown id -> 200 [].
+      operationId: chatChatsProveedor
+      x-source: backend/src/routes/Chat.php:69
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Provider id.
+      responses:
+        '200':
+          description: Array of chat summaries; [] when none.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/ChatListItem'
+              example:
+                success: true
+                message: Chats del proveedor obtenidos exitosamente
+                data:
+                - tipo: Chat
+                  idCliente: 1
+                  idServicio: 1
+                  idProveedor: 2
+                  nombre: Juan
+                  apellido: Perez
+                  imagen: https://example.com/avatars/juan.png
+                  servicioTitulo: Plomeria a domicilio
+                code: 200
+        '400':
+          description: Faltan datos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Error al obtener los chats del proveedor
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener los chats del proveedor
+                code: 500
+      x-quirks:
+      - Q34
+    x-unsupported-methods:
+      description: The chat router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body (no JSON, no error). POST/GET
+        unknown actions return 404.
+  /review/subirReview:
+    post:
+      tags:
+      - review
+      summary: Create a review for a service
+      description: 'No authentication and no check that the client actually contracted the service. `idCliente`, `idServicio`, `calificacion`
+        are required; `comentario` defaults to ''''. Calificación must be 1-5; a non-numeric string such as ''abc'' also fails the `> 5` comparison
+        and returns the same range message. The image is optional but if a file is sent and Cloudinary is unavailable, the whole review fails
+        with ''Error al subir la imagen''. `Publica` has PK `(idCliente,idServicio)`: a second review by the same client for the same service
+        throws a PDOException that the controller does not catch as a business error, so the raw SQLSTATE text becomes the 500 message. Business
+        validation errors are also 500 (not 400).'
+      operationId: reviewSubirReview
+      x-source: backend/src/routes/Resena.php:11
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: '`imagen` optional; comment defaults to an empty string when omitted.'
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                calificacion:
+                  type: string
+                  description: Integer 1-5; decimals pass the range check and are stored in an INT column.
+                comentario:
+                  type: string
+                  maxLength: 300
+                  default: ''
+                imagen:
+                  type: string
+                  format: binary
+              required:
+              - idCliente
+              - idServicio
+              - calificacion
+            example:
+              idCliente: '1'
+              idServicio: '2'
+              calificacion: '4'
+              comentario: Muy buen trabajo
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                calificacion:
+                  type: string
+                  description: Integer 1-5; decimals pass the range check and are stored in an INT column.
+                comentario:
+                  type: string
+                  maxLength: 300
+                  default: ''
+                imagen:
+                  type: string
+                  format: binary
+              required:
+              - idCliente
+              - idServicio
+              - calificacion
+            example:
+              idCliente: '1'
+              idServicio: '2'
+              calificacion: '4'
+              comentario: Muy buen trabajo
+      responses:
+        '201':
+          description: resena enviada exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ReviewCreatedData'
+              example:
+                success: true
+                message: resena enviada exitosamente
+                data:
+                  id: '2'
+                code: 200
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Also 'La calificación debe estar entre 1 y 5', 'Error al subir la imagen', raw SQLSTATE on duplicate, 'No se pudo crear
+            la resena'.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 500
+      x-needs-mock: true
+      x-mock-target: Cloudinary upload API
+      x-quirks:
+      - Q35
+      - Q36
+      - Q37
+  /review/getReview:
+    get:
+      tags:
+      - review
+      summary: List reviews of a service
+      description: 'Returns a plain array with the client''s name/avatar joined. No idServicio or an unknown service returns 200 with `data: []`;
+        it is never a 404. `imagen` is null when the review has no image.'
+      operationId: reviewGetReview
+      x-source: backend/src/routes/Resena.php:29
+      x-evidence: EJECUTADO
+      parameters:
+      - name: idServicio
+        in: query
+        required: false
+        schema:
+          type: integer
+        description: Service id; optional (missing -> []).
+        example: 1
+      responses:
+        '200':
+          description: Array of reviews; [] when none or when idServicio is missing.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Review'
+              example:
+                success: true
+                message: resena obtenida exitosamente
+                data:
+                - idResena: 1
+                  calificacion: 5
+                  comentario: Excelente trabajo
+                  imagen: null
+                  nombreCliente: Juan
+                  apellidoCliente: Perez
+                  imagenCliente: https://example.com/avatars/juan.png
+                  idCliente: 1
+                code: 200
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al obtener las resenas
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener las resenas
+                code: 500
+      x-quirks:
+      - Q38
+  /reserva/crear:
+    post:
+      tags:
+      - reserva
+      summary: Create a reservation and (if missing) its chat
+      description: '`idCliente`, `idServicio`, `fecha` are required. The service must exist (checked through ServicioControlador). The client
+        existence is not checked: a bad id triggers a raw foreign-key PDOException that is caught and returned as the 500 message. On success
+        it inserts `Contrata` with `confirmado=0` and creates the `Contacta` row when absent. No date validation (past dates accepted), no availability
+        check against Servicio_DiaDisponible, no duplicate check.'
+      operationId: reservaCrear
+      x-source: backend/src/routes/Reserva.php:12
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                fecha:
+                  type: string
+                  format: date
+              required:
+              - idCliente
+              - idServicio
+              - fecha
+            example:
+              idCliente: '1'
+              idServicio: '2'
+              fecha: '2026-12-15'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                fecha:
+                  type: string
+                  format: date
+              required:
+              - idCliente
+              - idServicio
+              - fecha
+            example:
+              idCliente: '1'
+              idServicio: '2'
+              fecha: '2026-12-15'
+      responses:
+        '201':
+          description: Reserva creada exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ReservaCreatedData'
+              example:
+                success: true
+                message: Reserva creada exitosamente
+                data:
+                  result: '2'
+                code: 200
+        '200':
+          description: 'Only for unsupported methods (PUT/DELETE/etc.) on this path: HTTP 200 with an empty body, because the reservation router
+            has no default branch.'
+          content: {}
+        '400':
+          description: Faltan datos obligatorios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Also raw SQLSTATE for unknown client or DB failure.
+          content:
+            application/json:
+              example:
+                success: false
+                message: El servicio con ID 999 no existe
+                code: 500
+      x-quirks:
+      - Q39
+    x-unsupported-methods:
+      description: The reservation router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body. POST/GET unknown
+        actions return 404.
+  /reserva/confirmar:
+    post:
+      tags:
+      - reserva
+      summary: Set the confirmed flag of a reservation
+      description: All four fields are required. The UPDATE matches on the full PK and returns `execute()`'s boolean, so confirming a reservation
+        that does not exist still returns 200 `{success:true}` (0 affected rows is not detected).
+      operationId: reservaConfirmar
+      x-source: backend/src/routes/Reserva.php:27
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                confirmado:
+                  type: string
+                  description: 0/1 or any value MySQL coerces to boolean.
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                idReserva:
+                  type: string
+              required:
+              - confirmado
+              - idCliente
+              - idServicio
+              - idReserva
+            example:
+              confirmado: '1'
+              idCliente: '1'
+              idServicio: '1'
+              idReserva: '1'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                confirmado:
+                  type: string
+                  description: 0/1 or any value MySQL coerces to boolean.
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                idReserva:
+                  type: string
+              required:
+              - confirmado
+              - idCliente
+              - idServicio
+              - idReserva
+            example:
+              confirmado: '1'
+              idCliente: '1'
+              idServicio: '1'
+              idReserva: '1'
+      responses:
+        '200':
+          description: Reserva confirmada exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ReservaSuccessData'
+              example:
+                success: true
+                message: Reserva confirmada exitosamente
+                data:
+                  success: true
+                code: 200
+        '400':
+          description: Faltan datos obligatorios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Only on PDOException.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al confirmar la reserva
+                code: 500
+      x-quirks:
+      - Q40
+    x-unsupported-methods:
+      description: The reservation router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body. POST/GET unknown
+        actions return 404.
+  /reserva/eliminarReserva:
+    post:
+      tags:
+      - reserva
+      summary: Delete a reservation by id
+      description: Parameter is `id` (not `idReserva`). Identity/auth are absent. `execute()`'s boolean is ignored for row count, so deleting
+        a non-existent id returns 200 success. FK cascades do not remove the chat (Contacta is independent).
+      operationId: reservaEliminar
+      x-source: backend/src/routes/Reserva.php:42
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '1'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '1'
+      responses:
+        '200':
+          description: Reserva eliminada exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ReservaSuccessData'
+              example:
+                success: true
+                message: Reserva eliminada exitosamente
+                data:
+                  success: true
+                code: 200
+        '400':
+          description: Faltan datos obligatorios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al eliminar la reserva
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al eliminar la reserva
+                code: 500
+      x-quirks:
+      - Q40
+      - Q41
+    x-unsupported-methods:
+      description: The reservation router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body. POST/GET unknown
+        actions return 404.
+  /reserva/getReservaProveedor:
+    get:
+      tags:
+      - reserva
+      summary: List reservations received by a provider
+      description: '`id` is required; each row gets `tipo: ''schedule''` prepended. Empty result -> 200 []. Fields include client name/avatar
+        and servicioTitulo.'
+      operationId: reservaGetProveedor
+      x-source: backend/src/routes/Reserva.php:59
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Provider id.
+      responses:
+        '200':
+          description: Array of reservations; [] when none.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/ReservaListItem'
+              example:
+                success: true
+                message: Reserva obtenida exitosamente
+                data:
+                - tipo: schedule
+                  idReserva: 1
+                  idCliente: 1
+                  idServicio: 1
+                  fecha: '2026-11-01'
+                  confirmado: 0
+                  servicioTitulo: Plomeria a domicilio
+                  nombreCliente: Juan
+                  apellidoCliente: Perez
+                  imagen: https://example.com/avatars/juan.png
+                code: 200
+        '400':
+          description: Faltan datos obligatorios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al obtener la reserva
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener la reserva
+                code: 500
+    x-unsupported-methods:
+      description: The reservation router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body. POST/GET unknown
+        actions return 404.
+  /reserva/getReservaCliente:
+    get:
+      tags:
+      - reserva
+      summary: List reservations made by a client
+      description: '`id` is required; rows get `tipo: ''schedule''` and provider name/avatar. Empty result -> 200 [].'
+      operationId: reservaGetCliente
+      x-source: backend/src/routes/Reserva.php:71
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Client id.
+      responses:
+        '200':
+          description: Array of reservations; [] when none.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/ReservaListItem'
+              example:
+                success: true
+                message: Reserva obtenida exitosamente
+                data:
+                - tipo: schedule
+                  idReserva: 1
+                  idCliente: 1
+                  idServicio: 1
+                  fecha: '2026-11-01'
+                  confirmado: 0
+                  servicioTitulo: Plomeria a domicilio
+                  nombreProveedor: Maria
+                  apellidoProveedor: Gomez
+                  imagen: https://example.com/avatars/maria.png
+                code: 200
+        '400':
+          description: Faltan datos obligatorios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Error al obtener la reserva
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener la reserva
+                code: 500
+    x-unsupported-methods:
+      description: The reservation router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body. POST/GET unknown
+        actions return 404.
+  /reserva/getReservaById:
+    get:
+      tags:
+      - reserva
+      summary: Get one reservation with service and client data
+      description: '`id` is required. The controller spreads the row into `[''tipo'' => ''schedule'', ...$row]`; a missing reservation makes the
+        model return `false` and the route answers 500 ''Error al obtener la reserva'' (not 404).'
+      operationId: reservaGetById
+      x-source: backend/src/routes/Reserva.php:83
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Reservation id.
+      responses:
+        '200':
+          description: Reserva obtenida exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ReservaDetail'
+              example:
+                success: true
+                message: Reserva obtenida exitosamente
+                data:
+                  tipo: schedule
+                  idReserva: 1
+                  idCliente: 1
+                  idServicio: 1
+                  fecha: '2026-11-01'
+                  confirmado: 0
+                  titulo: Plomeria a domicilio
+                  precio: 1500
+                  descripcion: Reparacion de canerias y griferia
+                  idUsuario: 1
+                  nombre: Juan
+                  apellido: Perez
+                  imagen: https://example.com/avatars/juan.png
+                  email: juan@example.com
+                  fechaNac: '1990-01-01'
+                code: 200
+        '400':
+          description: Faltan datos obligatorios
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '405':
+          description: Método no permitido
+          content:
+            application/json:
+              example:
+                success: false
+                message: Método no permitido
+                code: 405
+        '500':
+          description: Unknown reservation id also returns 500.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener la reserva
+                code: 500
+      x-quirks:
+      - Q42
+    x-unsupported-methods:
+      description: The reservation router has no default branch. PUT, DELETE, PATCH, etc. produce HTTP 200 with an empty body. POST/GET unknown
+        actions return 404.
+  /pago/pagar:
+    post:
+      tags:
+      - pago
+      summary: Record a payment row
+      description: 'Inserts into `Pagos` with `NOW()` and no `estado` (defaults to NULL). All five fields are trimmed and required; price must
+        be numeric and > 0 (0 is rejected by the `empty()` check first, -5 by the numeric check). Unknown client/service/provider is not validated:
+        the FK violation is uncaught and produces HTTP 500 with an empty body. The primary key is `(idCliente,idServicio,fechaPago)`, so two calls
+        in the same second collide.'
+      operationId: pagoPagar
+      x-source: backend/src/routes/Pago.php:12
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                idProveedor:
+                  type: string
+                precio:
+                  type: string
+                titulo:
+                  type: string
+                  maxLength: 100
+              required:
+              - idCliente
+              - idServicio
+              - idProveedor
+              - precio
+              - titulo
+            example:
+              idCliente: '1'
+              idServicio: '1'
+              idProveedor: '2'
+              precio: '1500'
+              titulo: Plomeria
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                idProveedor:
+                  type: string
+                precio:
+                  type: string
+                titulo:
+                  type: string
+                  maxLength: 100
+              required:
+              - idCliente
+              - idServicio
+              - idProveedor
+              - precio
+              - titulo
+            example:
+              idCliente: '1'
+              idServicio: '1'
+              idProveedor: '2'
+              precio: '1500'
+              titulo: Plomeria
+      responses:
+        '201':
+          description: Pago guardado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/PagoCreatedData'
+              example:
+                success: true
+                message: Pago guardado exitosamente
+                data:
+                  funciono: true
+                code: 200
+        '400':
+          description: Also 'Precio inválido' for non-numeric or <= 0 (except exactly 0, which hits the empty check first).
+          content:
+            application/json:
+              example:
+                success: false
+                message: Faltan datos obligatorios o están vacíos
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Empty body on uncaught PDOException (unknown client/service/provider) or on the controller's error branch (wrapped as 'Error
+            al procesar el pago').
+          content: {}
+      x-quirks:
+      - Q43
+      - Q44
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/saveTokens:
+    post:
+      tags:
+      - pago
+      summary: Store (encrypted) MercadoPago OAuth tokens for a provider
+      description: '`id_proveedor` is required (presence only, not existence), then `access_token` and `refresh_token` must be non-empty; `public_key`
+        is optional. Tokens are AES-256-GCM encrypted with `KEY_HEX` and written to `Proveedor.accesToken`/`refreshToken`/`publicKey`. If `KEY_HEX`
+        is missing or invalid, a random key is generated per request, which makes later token decryption impossible. Any exception returns 500
+        with the exception message.'
+      operationId: pagoSaveTokens
+      x-source: backend/src/routes/Pago.php:32
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id_proveedor:
+                  type: string
+                access_token:
+                  type: string
+                refresh_token:
+                  type: string
+                public_key:
+                  type: string
+              required:
+              - id_proveedor
+              - access_token
+              - refresh_token
+            example:
+              id_proveedor: '2'
+              access_token: APP_USR-fake-access
+              refresh_token: TG-fake-refresh
+              public_key: APP_USR-fake-public
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                id_proveedor:
+                  type: string
+                access_token:
+                  type: string
+                refresh_token:
+                  type: string
+                public_key:
+                  type: string
+              required:
+              - id_proveedor
+              - access_token
+              - refresh_token
+            example:
+              id_proveedor: '2'
+              access_token: APP_USR-fake-access
+              refresh_token: TG-fake-refresh
+              public_key: APP_USR-fake-public
+      responses:
+        '200':
+          description: Tokens guardados correctamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/TokensSavedData'
+              example:
+                success: true
+                message: Tokens guardados correctamente
+                data: []
+                code: 200
+        '400':
+          description: Also 'Faltan los tokens'.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Falta el ID del proveedor
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: 'Also ''Error al guardar tokens: ...''.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al guardar los tokens en la base de datos
+                code: 500
+      x-quirks:
+      - Q45
+      - Q46
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/historialCliente:
+    get:
+      tags:
+      - pago
+      summary: List payments made by a client
+      description: '`id` is required. Returns DB rows joined with service and provider, ordered by `fechaPago DESC`. `precio` is a MySQL DECIMAL
+        rendered as a string. Empty history is 200 [].'
+      operationId: pagoHistorialCliente
+      x-source: backend/src/routes/Pago.php:77
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Client id.
+      responses:
+        '200':
+          description: Array of payment rows; [] when none.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/PagoClienteRecord'
+              example:
+                success: true
+                message: Historial de pagos obtenido exitosamente
+                data:
+                - idCliente: 1
+                  idServicio: 2
+                  idProveedor: 2
+                  fechaPago: '2026-10-04 10:00:00'
+                  estado: pendiente
+                  precio: '2000.00'
+                  titulo: Jardineria basica
+                  paymentId: null
+                  servicioTitulo: Jardineria basica
+                  servicioDescripcion: Corte de cesped y poda
+                  nombre: Maria
+                  apellido: Gomez
+                  imagen: https://example.com/avatars/maria.png
+                  nombreEmpresa: Gomez Servicios
+                code: 200
+        '400':
+          description: 'Faltan datos. idCliente: '
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos. idCliente: '
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Error al obtener el historial de pagos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener el historial de pagos
+                code: 500
+      x-other-actions:
+        description: GET /pago or GET /pago/<unknown-action> returns HTTP 200 with an empty body, because only callback is a separate if and there
+          is no final else.
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/historialProveedor:
+    get:
+      tags:
+      - pago
+      summary: List payments received by a provider
+      description: '`id` is required. Joined with the client user row (no `nombreEmpresa`). Ordered by fechaPago DESC.'
+      operationId: pagoHistorialProveedor
+      x-source: backend/src/routes/Pago.php:88
+      x-evidence: EJECUTADO
+      parameters:
+      - name: id
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Provider id.
+      responses:
+        '200':
+          description: Array of payment rows; [] when none.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/PagoProveedorRecord'
+              example:
+                success: true
+                message: Historial de pagos del proveedor obtenido exitosamente
+                data:
+                - idCliente: 1
+                  idServicio: 2
+                  idProveedor: 2
+                  fechaPago: '2026-10-04 10:00:00'
+                  estado: pendiente
+                  precio: '2000.00'
+                  titulo: Jardineria basica
+                  paymentId: null
+                  servicioTitulo: Jardineria basica
+                  servicioDescripcion: Corte de cesped y poda
+                  nombre: Juan
+                  apellido: Perez
+                  imagen: https://example.com/avatars/juan.png
+                code: 200
+        '400':
+          description: 'Faltan datos. idProveedor: '
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos. idProveedor: '
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Error al obtener el historial de pagos del proveedor
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al obtener el historial de pagos del proveedor
+                code: 500
+      x-other-actions:
+        description: Unknown GET actions under /pago return 200 empty.
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/mp:
+    get:
+      tags:
+      - pago
+      summary: Create a MercadoPago Checkout preference with the provider's token
+      description: 'All three query params are required; the literal string ''undefined'' is rejected as missing. The provider must already have
+        encrypted tokens (`saveTokens`); otherwise 500 with a business message. The token is decrypted with `KEY_HEX`; if decryption fails, 500
+        asks to re-link the account. The MP SDK then calls the real API: on any SDK/transport exception (including DNS/network failure), the exception
+        is not caught by the route and the response is HTTP 500 with an empty body. `marketplace_fee` is 8% of the price and `manual_capture`
+        is on. Success returns `data.preferenciaMP` with `preference_id` and `public_key`.'
+      operationId: pagoMp
+      x-source: backend/src/routes/Pago.php:99
+      x-evidence: EJECUTADO
+      parameters:
+      - name: precio
+        in: query
+        required: true
+        schema:
+          type: number
+        description: Positive price; cast with floatval.
+        example: 100
+      - name: titulo
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Item title.
+        example: Plomeria
+      - name: idProveedor
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: Provider id owning the MP tokens.
+        example: 2
+      responses:
+        '200':
+          description: Preferencia de pago obtenida exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MpPreferenceData'
+              example:
+                success: true
+                message: Preferencia de pago obtenida exitosamente
+                data:
+                  preferenciaMP:
+                    preference_id: 1234567890-abcdef
+                    public_key: APP_USR-fake-public
+                code: 200
+        '400':
+          description: Also 'Precio inválido' and 'Falta idProveedor'.
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos obligatorios: precio y titulo'
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Business errors ('El proveedor no tiene tokens...', 'Los tokens ... desactualizados...', 'Error al crear preferencia de
+            pago') are JSON; an uncaught MercadoPago SDK exception returns an empty body.
+          content:
+            application/json:
+              example:
+                success: false
+                message: El proveedor no tiene tokens de MercadoPago configurados. Debe vincular su cuenta primero.
+                code: 500
+      x-needs-mock: true
+      x-mock-target: MercadoPago PreferenceClient API
+      x-quirks:
+      - Q47
+      - Q48
+      - Q49
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/verificarContratacion:
+    get:
+      tags:
+      - pago
+      summary: Tell whether a client has a completed payment for a service
+      description: Counts `Pagos` rows with `estado='completado'` for the pair. Both params required. Returns `data.contratado` boolean.
+      operationId: pagoVerificarContratacion
+      x-source: backend/src/routes/Pago.php:121
+      x-evidence: EJECUTADO
+      parameters:
+      - name: idCliente
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: ''
+      - name: idServicio
+        in: query
+        required: true
+        schema:
+          type: integer
+        description: ''
+      responses:
+        '200':
+          description: Verificación completada
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ContratadoData'
+              example:
+                success: true
+                message: Verificación completada
+                data:
+                  contratado: true
+                code: 200
+        '400':
+          description: 'Faltan datos obligatorios: idCliente, idServicio'
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos obligatorios: idCliente, idServicio'
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Error al verificar la contratación
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al verificar la contratación
+                code: 500
+      x-other-actions:
+        description: Unknown GET actions under /pago return 200 empty.
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/callback:
+    get:
+      tags:
+      - pago
+      summary: 'MercadoPago OAuth callback: exchanges the code and redirects with tokens in the URL'
+      description: 'Reads `code`; without it returns 400. Calls MercadoPago''s OAuth token endpoint with the configured client id/secret/redirect
+        URI. On success it issues `Location: https://jobifyuy.app/confirm?requestId=<access_token>&requestType=<refresh_token>&publicKey=<public_key>`
+        and exits: BOTH OAuth tokens travel as URL query parameters to a hardcoded external host, exposing them to logs/history/referrers. No
+        `Set-Cookie`, no server-side session. Config missing, cURL missing or MP error produce JSON 400/500. The 302 has never been observed in
+        this harness because it requires real MercadoPago credentials (needs_mock).'
+      operationId: pagoCallback
+      x-source: backend/src/routes/Pago.php:138
+      x-evidence: EJECUTADO
+      parameters:
+      - name: code
+        in: query
+        required: true
+        schema:
+          type: string
+        description: MercadoPago authorization code.
+        example: fake_code
+      responses:
+        '302':
+          description: '[LEÍDO] Success redirect to the hardcoded frontend URL with tokens in the query string. Not reproducible with fake credentials.'
+          headers:
+            Location:
+              schema:
+                type: string
+              example: https://jobifyuy.app/confirm?requestId=APP_USR-access&requestType=TG-refresh&publicKey=APP_USR-public
+        '400':
+          description: Also MP OAuth errors (e.g. invalid code) propagated with their code, and config errors returned as 500 by loginMP but flattened
+            here.
+          content:
+            application/json:
+              example:
+                success: false
+                message: No se recibió el authorization code
+                code: 400
+        '500':
+          description: 'JSON error when tokens are missing/config fails, or ''Could not resolve host: api.mercadopago.com ...'' when the MP API
+            is unreachable.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Could not resolve host: api.mercadopago.com (Could not contact DNS servers)'
+                code: 500
+      x-needs-mock: true
+      x-mock-target: MercadoPago OAuth token endpoint
+      x-quirks:
+      - Q50
+      - Q51
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/confirmar-pago:
+    put:
+      tags:
+      - pago
+      summary: Save the MercadoPago paymentId and state of an existing payment row
+      description: 'Reads a JSON body from `php://input` (form fields are ignored). Required: idCliente, idServicio, fechaPago, paymentId; `estado`
+        defaults to ''pendiente'' and is written without whitelist validation (invalid values make MySQL fail with a 500). Both UPDATEs match
+        the full PK; `execute()` booleans are returned as success, so a non-existent row still returns 200.'
+      operationId: pagoConfirmarPago
+      x-source: backend/src/routes/Pago.php:190
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: application/json only; x-www-form-urlencoded/multipart bodies are not read.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                fechaPago:
+                  type: string
+                  example: '2026-10-01 10:00:00'
+                paymentId:
+                  type: string
+                estado:
+                  type: string
+                  enum:
+                  - pendiente
+                  - completado
+                  - fallido
+                  default: pendiente
+              required:
+              - idCliente
+              - idServicio
+              - fechaPago
+              - paymentId
+            example:
+              idCliente: '1'
+              idServicio: '1'
+              fechaPago: '2026-10-01 10:00:00'
+              paymentId: MP-123
+              estado: completado
+      responses:
+        '200':
+          description: Pago confirmado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/PagoConfirmedData'
+              example:
+                success: true
+                message: Pago confirmado exitosamente
+                data:
+                  success: true
+                  message: 'Pago confirmado con estado: completado'
+                  paymentId: MP-123
+                code: 200
+        '400':
+          description: Also 'Error al confirmar el pago' mapped to 400.
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos obligatorios: idCliente, idServicio, fechaPago, paymentId'
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: 'Uncaught PDOException on an invalid estado enum or malformed data: empty body.'
+          content: {}
+      x-quirks:
+      - Q52
+      - Q53
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/cancelar:
+    put:
+      tags:
+      - pago
+      summary: Cancel a payment (local or MercadoPago refund)
+      description: 'JSON body only. If the row is missing -> 400 ''Pago no encontrado''. If already ''fallido'' -> 400. If it has no paymentId,
+        only the local state is set to ''fallido'' (200). If it has a paymentId, it calls the real MercadoPago refunds API with the provider''s
+        decrypted token (no decryption is performed here: `Proveedor.accesToken` is used raw, so an encrypted token is sent as-is); network/API
+        failure returns 400 ''Error al procesar el reembolso...''. Unknown cliente/servicio/fecha combinations are not validated beyond the SELECT.'
+      operationId: pagoCancelar
+      x-source: backend/src/routes/Pago.php:212
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: application/json only.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                fechaPago:
+                  type: string
+              required:
+              - idCliente
+              - idServicio
+              - fechaPago
+            example:
+              idCliente: '1'
+              idServicio: '1'
+              fechaPago: '2026-10-02 10:00:00'
+      responses:
+        '200':
+          description: Compra cancelada exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/CancelResultData'
+              example:
+                success: true
+                message: Compra cancelada exitosamente
+                data:
+                  success: true
+                  message: Pago cancelado localmente (no procesado por MercadoPago)
+                code: 200
+        '400':
+          description: 'Also ''Pago no encontrado'', ''El pago ya está cancelado'', ''No se encontró el token de acceso del proveedor'', ''Error
+            al procesar el reembolso en MercadoPago: ...''.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos obligatorios: idCliente, idServicio, fechaPago'
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Uncaught exception, empty body.
+          content: {}
+      x-needs-mock: true
+      x-mock-target: MercadoPago refunds API
+      x-quirks:
+      - Q54
+      - Q55
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /pago/aprobar:
+    put:
+      tags:
+      - pago
+      summary: Approve a pending payment (local or MercadoPago capture)
+      description: JSON body only. Missing/complete/failed states produce 400 business errors. Without paymentId, the local state is set to 'completado'
+        (200). With paymentId it issues a PUT capture to the real MercadoPago API using the raw `Proveedor.accesToken`; failure is a 400 with
+        the MP error.
+      operationId: pagoAprobar
+      x-source: backend/src/routes/Pago.php:233
+      x-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: application/json only.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idCliente:
+                  type: string
+                idServicio:
+                  type: string
+                fechaPago:
+                  type: string
+              required:
+              - idCliente
+              - idServicio
+              - fechaPago
+            example:
+              idCliente: '1'
+              idServicio: '2'
+              fechaPago: '2026-10-04 10:00:00'
+      responses:
+        '200':
+          description: Pago aprobado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ApproveResultData'
+              example:
+                success: true
+                message: Pago aprobado exitosamente
+                data:
+                  success: true
+                  message: Pago aprobado localmente (no procesado por MercadoPago)
+                code: 200
+        '400':
+          description: 'Also ''Pago no encontrado'', ''El pago ya está aprobado'', ''No se puede aprobar un pago cancelado'', ''Error al procesar
+            la aprobación en MercadoPago: ...''.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan datos obligatorios: idCliente, idServicio, fechaPago'
+                code: 400
+        '404':
+          description: Ruta no encontrada
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '500':
+          description: Uncaught exception, empty body.
+          content: {}
+      x-needs-mock: true
+      x-mock-target: MercadoPago payments capture API
+      x-quirks:
+      - Q54
+    x-other-actions:
+      description: GET /pago/<unknown-action> and bare GET /pago return 200 with an empty body. Any method with an unknown action reachable from
+        the switch falls into 404 (POST/PUT/DELETE default) — for GET it is the empty 200 above.
+  /admin/verifyPassword:
+    post:
+      tags:
+      - admin
+      summary: Compare a password with ADMIN_PASSWORD
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. Accepts `application/json` (`php://input`) or form data (`$_POST`). Compares with `hash_equals`
+        against `ADMIN_PASSWORD`; there is no session or token, so this only returns a boolean. Missing env -> 500; wrong password -> 401.'
+      operationId: adminVerifyPassword
+      x-source: backend/src/routes/Admin.php:13
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+              required:
+              - password
+            example:
+              password: test_admin_password
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+            example:
+              password: test_admin_password
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/AdminVerifyData'
+              example:
+                success: true
+                message: Acceso concedido
+                data:
+                  success: true
+                  message: Acceso concedido
+                code: 200
+        '400':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Contraseña requerida
+                code: 400
+        '401':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Contraseña incorrecta
+                code: 401
+        '500':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Configuración de administrador no disponible
+                code: 500
+  /admin/register:
+    post:
+      tags:
+      - admin
+      summary: Create a Cliente, Proveedor or Moderador without password policy
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. Accepts JSON or form input. Required: tipo, email, nombre, apellido, password, fecha_nacimiento.
+        `tipo` must be exactly ''Moderador'', ''Proveedor'' or ''Cliente''; otherwise 500. The password is hashed, but no strength/complexity
+        validation is applied. It uses a hardcoded Cloudinary avatar and default provider fields.'
+      operationId: adminRegister
+      x-source: backend/src/routes/Admin.php:37
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: Also accepts application/json.
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                tipo:
+                  type: string
+                  enum:
+                  - Cliente
+                  - Proveedor
+                  - Moderador
+                email:
+                  type: string
+                nombre:
+                  type: string
+                apellido:
+                  type: string
+                password:
+                  type: string
+                fecha_nacimiento:
+                  type: string
+                  format: date
+              required:
+              - tipo
+              - email
+              - nombre
+              - apellido
+              - password
+              - fecha_nacimiento
+            example:
+              tipo: Moderador
+              email: m@example.com
+              nombre: M
+              apellido: X
+              password: abc
+              fecha_nacimiento: '1990-01-01'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                tipo:
+                  type: string
+                  enum:
+                  - Cliente
+                  - Proveedor
+                  - Moderador
+                email:
+                  type: string
+                nombre:
+                  type: string
+                apellido:
+                  type: string
+                password:
+                  type: string
+                fecha_nacimiento:
+                  type: string
+                  format: date
+              required:
+              - tipo
+              - email
+              - nombre
+              - apellido
+              - password
+              - fecha_nacimiento
+            example:
+              tipo: Moderador
+              email: m@example.com
+              nombre: M
+              apellido: X
+              password: abc
+              fecha_nacimiento: '1990-01-01'
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '201':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/AdminRegisterData'
+              example:
+                success: true
+                message: Usuario registrado exitosamente
+                data:
+                  id: 4
+                code: 200
+        '400':
+          description: '[LEÍDO, only if routed] The literal message appends `json_encode($input)`.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: 'Faltan campos requeridos. Recibido: {...}'
+                code: 400
+        '500':
+          description: '[LEÍDO, only if routed] Also duplicate e-mail and DB errors.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Tipo de usuario no válido
+                code: 500
+  /admin/userList:
+    get:
+      tags:
+      - admin
+      summary: List users joined with phone/role
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. Inner-joins `Usuario_Telefono` (users without phone disappear) and classifies via LEFT JOINs.'
+      operationId: adminUserList
+      x-source: backend/src/routes/Admin.php:123
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed] Array of users.'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/AdminUser'
+              example:
+                success: true
+                message: Lista de usuarios obtenida exitosamente
+                data:
+                - id: 1
+                  nombre: Juan
+                  apellido: Perez
+                  email: juan@example.com
+                  fechaNac: '1990-01-01'
+                  imagen: https://example.com/avatars/juan.png
+                  telefono: '+59899111111'
+                  tipoUsuario: Cliente
+                code: 200
+        '500':
+          description: '[LEÍDO, only if routed] Also ''Error al obtener la lista de usuarios''.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: No se encontraron usuarios
+                code: 500
+  /admin/deleteUser:
+    post:
+      tags:
+      - admin
+      summary: Delete a user
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. `id` from form. Cascades through Usuario FKs. No confirmation and no auth.'
+      operationId: adminDeleteUser
+      x-source: backend/src/routes/Admin.php:68
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '4'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '4'
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MessageData'
+              example:
+                success: true
+                message: Usuario eliminado exitosamente
+                data:
+                  message: Usuario eliminado exitosamente
+                code: 200
+        '400':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Falta el ID del usuario a eliminar
+                code: 400
+        '500':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al eliminar el usuario
+                code: 500
+  /admin/serviceList:
+    get:
+      tags:
+      - admin
+      summary: List all services with concatenated categories
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. LEFT JOIN + GROUP_CONCAT; `categorias` is a comma-separated string.'
+      operationId: adminServiceList
+      x-source: backend/src/routes/Admin.php:130
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed] Array of services.'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/AdminService'
+              example:
+                success: true
+                message: Lista de servicios obtenida exitosamente
+                data:
+                - id: 1
+                  titulo: Plomeria a domicilio
+                  descripcion: Reparacion de canerias y griferia
+                  precio: 1500
+                  idProveedor: 2
+                  categorias: Plomeria
+                code: 200
+        '500':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: No se encontraron servicios
+                code: 500
+  /admin/deleteService:
+    post:
+      tags:
+      - admin
+      summary: Delete a service
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. `id` from form. FK cascades.'
+      operationId: adminDeleteService
+      x-source: backend/src/routes/Admin.php:79
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '1'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '1'
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MessageData'
+              example:
+                success: true
+                message: Servicio eliminado exitosamente
+                data:
+                  message: Servicio eliminado exitosamente
+                code: 200
+        '400':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Falta el ID del servicio a eliminar
+                code: 400
+        '500':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al eliminar el servicio
+                code: 500
+  /admin/reviewList:
+    get:
+      tags:
+      - admin
+      summary: List reviews with client/service ids
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. Joins `Publica`; message says ''Estadísticas del dashboard'' although it returns reviews.'
+      operationId: adminReviewList
+      x-source: backend/src/routes/Admin.php:137
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed] Array of reviews.'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/AdminReview'
+              example:
+                success: true
+                message: Estadísticas del dashboard obtenidas exitosamente
+                data:
+                - id: 1
+                  calificacion: 5
+                  comentario: Excelente trabajo
+                  idCliente: 1
+                  idServicio: 1
+                code: 200
+        '500':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: No se encontraron reseñas
+                code: 500
+      x-quirks:
+      - Q56
+  /admin/deleteReview:
+    post:
+      tags:
+      - admin
+      summary: Delete a review
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. `id` from form. Deleting the Resena cascades Publica/Modera.'
+      operationId: adminDeleteReview
+      x-source: backend/src/routes/Admin.php:90
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '1'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+              required:
+              - id
+            example:
+              id: '1'
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MessageData'
+              example:
+                success: true
+                message: Reseña eliminada exitosamente
+                data:
+                  message: Reseña eliminada exitosamente
+                code: 200
+        '400':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Falta el ID de la reseña a eliminar
+                code: 400
+        '500':
+          description: '[LEÍDO, only if routed]'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al eliminar la reseña
+                code: 500
+  /admin/reviewModify:
+    post:
+      tags:
+      - admin
+      summary: Modify a review
+      description: 'NOT REACHABLE TODAY: `backend/index.php` has no `admin` case, so every `/admin/*` request is answered by the default branch
+        with 404 `Ruta no encontrada` before this route file is loaded. The responses below other than 404 describe the file''s own logic (LEÍDO)
+        and are what a future router would expose. `id`, `comentario`, `calificacion` required; `imagen` optional file. Success message is copied
+        from the dashboard endpoint: ''Estadísticas del dashboard obtenidas exitosamente''. If an image is sent but Cloudinary fails, it returns
+        500. When no new image is sent, the UPDATE writes `imagen = NULL`, erasing the previous image.'
+      operationId: adminReviewModify
+      x-source: backend/src/routes/Admin.php:101
+      x-evidence: LEÍDO
+      x-routed: false
+      x-actual-status: 404
+      x-actual-evidence: EJECUTADO
+      requestBody:
+        required: true
+        description: ''
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                comentario:
+                  type: string
+                calificacion:
+                  type: string
+                imagen:
+                  type: string
+                  format: binary
+              required:
+              - id
+              - comentario
+              - calificacion
+            example:
+              id: '1'
+              comentario: Editado
+              calificacion: '4'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                comentario:
+                  type: string
+                calificacion:
+                  type: string
+                imagen:
+                  type: string
+                  format: binary
+              required:
+              - id
+              - comentario
+              - calificacion
+            example:
+              id: '1'
+              comentario: Editado
+              calificacion: '4'
+      responses:
+        '404':
+          description: Actual behavior today.
+          content:
+            application/json:
+              example:
+                success: false
+                message: Ruta no encontrada
+                code: 404
+        '200':
+          description: '[LEÍDO, only if routed] Outer message is the copied one; data holds ''Reseña modificada exitosamente''.'
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SuccessEnvelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MessageData'
+              example:
+                success: true
+                message: Estadísticas del dashboard obtenidas exitosamente
+                data:
+                  message: Reseña modificada exitosamente
+                code: 200
+        '400':
+          description: '[LEÍDO, only if routed] Also ''Falta el comentario...'' and ''Falta el ID...''.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Falta la calificación de la reseña a modificar
+                code: 400
+        '500':
+          description: '[LEÍDO, only if routed] Also ''Error al modificar la reseña''.'
+          content:
+            application/json:
+              example:
+                success: false
+                message: Error al subir la imagen
+                code: 500
+      x-needs-mock: true
+      x-mock-target: Cloudinary upload API
+      x-quirks:
+      - Q56
+      - Q57
+  /admin/{action}:
+    x-routing-note:
+      description: Any other /admin path also returns 404 from index.php. /admin/userModify and /admin/serviceModify are called by the frontend
+        but do not exist even inside Admin.php.
+components:
+  schemas:
+    SuccessEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        data:
+          description: Payload; object, array or scalar depending on the operation.
+        code:
+          type: integer
+      required:
+      - success
+      - message
+      - data
+      - code
+    UsuarioClientData:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        apellido:
+          type: string
+        email:
+          type: string
+          format: email
+        fecha_nacimiento:
+          type: string
+          format: date
+        foto_perfil:
+          type: string
+        telefono:
+          type:
+          - string
+          - 'null'
+        esProveedor:
+          type: boolean
+          const: false
+      required:
+      - id
+      - nombre
+      - apellido
+      - email
+      - fecha_nacimiento
+      - foto_perfil
+      - telefono
+      - esProveedor
+    HabilidadRow:
+      type: object
+      properties:
+        idProveedor:
+          type: integer
+        habilidad:
+          type: string
+    TituloRow:
+      type: object
+      properties:
+        idProveedor:
+          type: integer
+        titulo:
+          type: string
+    UsuarioProviderData:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        apellido:
+          type: string
+        email:
+          type: string
+          format: email
+        fecha_nacimiento:
+          type: string
+          format: date
+        foto_perfil:
+          type: string
+        telefono:
+          type:
+          - string
+          - 'null'
+        nombre_empresa:
+          type: string
+        descripcion:
+          type: string
+        experiencia:
+          type: integer
+        habilidades:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabilidadRow'
+        titulos:
+          type: array
+          items:
+            $ref: '#/components/schemas/TituloRow'
+        esProveedor:
+          type: boolean
+          const: true
+        registroMp:
+          type: boolean
+          description: true when Proveedor.accesToken and refreshToken are both non-empty.
+        calificacionPromedio:
+          type: number
+        totalResenas:
+          type: integer
+      required:
+      - id
+      - nombre
+      - apellido
+      - email
+      - fecha_nacimiento
+      - foto_perfil
+      - telefono
+      - nombre_empresa
+      - descripcion
+      - experiencia
+      - habilidades
+      - titulos
+      - esProveedor
+      - registroMp
+      - calificacionPromedio
+      - totalResenas
+    LoginData:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        foto_perfil:
+          type: string
+      required:
+      - id
+      - nombre
+      - foto_perfil
+    RegisterData:
+      type: object
+      properties:
+        id:
+          type:
+          - string
+          - integer
+          description: PDO lastInsertId(); JSON-encoded as a string.
+      required:
+      - id
+    UpdateProfileData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        mensaje:
+          type: string
+      required:
+      - success
+      - mensaje
+    UpdatePasswordData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+      required:
+      - success
+    ServicioDetailData:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        precio:
+          type: integer
+        idProveedor:
+          type: integer
+        descripcion:
+          type: string
+        imagenes:
+          type: array
+          items:
+            type: string
+        categorias:
+          type: array
+          items:
+            type: string
+        ubicaciones:
+          type: array
+          items:
+            type: string
+        diasDisponibles:
+          type: array
+          items:
+            type: string
+        nombreProveedor:
+          type:
+          - string
+          - 'null'
+        apellidoProveedor:
+          type:
+          - string
+          - 'null'
+        imagenProveedor:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - nombre
+      - precio
+      - idProveedor
+      - descripcion
+      - imagenes
+      - categorias
+      - ubicaciones
+      - diasDisponibles
+    ServicioListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        precio:
+          type: integer
+        imagen:
+          description: First image URL, or [] when the service has no images.
+          oneOf:
+          - type: string
+          - type: array
+            maxItems: 0
+        categorias:
+          type: array
+          items:
+            type: string
+        ubicaciones:
+          type: array
+          items:
+            type: string
+        diasDisponibles:
+          type: array
+          items:
+            type: string
+        calificacion:
+          type:
+          - number
+          - 'null'
+        calificaciones:
+          type: integer
+        nombre_proveedor:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - nombre
+      - precio
+      - imagen
+      - categorias
+      - ubicaciones
+      - diasDisponibles
+      - calificacion
+      - calificaciones
+      - nombre_proveedor
+    ServicioSearchItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        precio:
+          type: integer
+        descripcion:
+          type: string
+        categorias:
+          type: array
+          items:
+            type: string
+        ubicaciones:
+          type: array
+          items:
+            type: string
+        diasDisponibles:
+          type: array
+          items:
+            type: string
+        imagenes:
+          description: 'First image URL; [] when none. NOTE: singular string, unlike getServicio''s array.'
+          oneOf:
+          - type: string
+          - type: array
+            maxItems: 0
+      required:
+      - id
+      - nombre
+      - precio
+      - descripcion
+      - categorias
+      - ubicaciones
+      - diasDisponibles
+      - imagenes
+    FavoritoItem:
+      type: object
+      properties:
+        isFavorito:
+          type: boolean
+          const: true
+        id:
+          type: integer
+        nombre:
+          type: string
+        precio:
+          type: integer
+        descripcion:
+          type: string
+        categorias:
+          type: array
+          items:
+            type: string
+        ubicaciones:
+          type: array
+          items:
+            type: string
+        diasDisponibles:
+          type: array
+          items:
+            type: string
+        imagenes:
+          oneOf:
+          - type: string
+          - type: array
+            maxItems: 0
+      required:
+      - isFavorito
+      - id
+      - nombre
+      - precio
+      - descripcion
+      - categorias
+      - ubicaciones
+      - diasDisponibles
+      - imagenes
+    ServicioCreatedData:
+      type: object
+      properties:
+        id:
+          type:
+          - string
+          - integer
+      required:
+      - id
+    ServicioUpdatedData:
+      type: object
+      properties:
+        success:
+          type: string
+      required:
+      - success
+    FavoritoData:
+      type: object
+      properties:
+        success:
+          type: string
+      required:
+      - success
+    ServicioDeletedData:
+      type: object
+      properties:
+        success:
+          type: string
+      required:
+      - success
+    ChatSendData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+      required:
+      - success
+    ChatCreateData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+      required:
+      - success
+    ChatMessage:
+      type: object
+      properties:
+        idMensaje:
+          type: integer
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+        idEmisor:
+          type: integer
+        mensaje:
+          type: string
+      required:
+      - idMensaje
+      - idCliente
+      - idServicio
+      - idEmisor
+      - mensaje
+    ChatRow:
+      type: object
+      properties:
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+        idProveedor:
+          type: integer
+        confirmado:
+          type: integer
+          description: Contrata.confirmado as returned by MySQL (0/1).
+        idReserva:
+          type: integer
+        imagenCliente:
+          type: string
+        nombreCliente:
+          type: string
+        apellidoCliente:
+          type: string
+        imagenProveedor:
+          type: string
+        nombreProveedor:
+          type: string
+        apellidoProveedor:
+          type: string
+      required:
+      - idCliente
+      - idServicio
+      - idProveedor
+      - confirmado
+      - idReserva
+      - imagenCliente
+      - nombreCliente
+      - apellidoCliente
+      - imagenProveedor
+      - nombreProveedor
+      - apellidoProveedor
+    ChatHistoryData:
+      type: object
+      properties:
+        chat:
+          $ref: '#/components/schemas/ChatRow'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+      required:
+      - chat
+      - messages
+    ChatListItem:
+      type: object
+      properties:
+        tipo:
+          type: string
+          const: Chat
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+        idProveedor:
+          type: integer
+        nombre:
+          type: string
+        apellido:
+          type: string
+        imagen:
+          type: string
+        servicioTitulo:
+          type: string
+      required:
+      - tipo
+      - idCliente
+      - idServicio
+      - idProveedor
+      - nombre
+      - apellido
+      - imagen
+      - servicioTitulo
+    Review:
+      type: object
+      properties:
+        idResena:
+          type: integer
+        calificacion:
+          type: integer
+        comentario:
+          type: string
+        imagen:
+          type:
+          - string
+          - 'null'
+        nombreCliente:
+          type: string
+        apellidoCliente:
+          type: string
+        imagenCliente:
+          type: string
+        idCliente:
+          type: integer
+      required:
+      - idResena
+      - calificacion
+      - comentario
+      - imagen
+      - nombreCliente
+      - apellidoCliente
+      - imagenCliente
+      - idCliente
+    ReviewCreatedData:
+      type: object
+      properties:
+        id:
+          type:
+          - string
+          - integer
+      required:
+      - id
+    ReservaListItem:
+      type: object
+      properties:
+        tipo:
+          type: string
+          const: schedule
+        idReserva:
+          type: integer
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+        fecha:
+          type: string
+          format: date
+        confirmado:
+          type: integer
+        servicioTitulo:
+          type: string
+        nombreCliente:
+          type: string
+        apellidoCliente:
+          type: string
+        imagen:
+          type: string
+        nombreProveedor:
+          type: string
+        apellidoProveedor:
+          type: string
+      required:
+      - tipo
+      - idReserva
+      - idCliente
+      - idServicio
+      - fecha
+      - confirmado
+      - servicioTitulo
+    ReservaDetail:
+      type: object
+      properties:
+        tipo:
+          type: string
+          const: schedule
+        idReserva:
+          type: integer
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+        fecha:
+          type: string
+          format: date
+        confirmado:
+          type: integer
+        titulo:
+          type: string
+        precio:
+          type: integer
+        descripcion:
+          type: string
+        idUsuario:
+          type: integer
+        nombre:
+          type: string
+        apellido:
+          type: string
+        imagen:
+          type: string
+        email:
+          type: string
+          format: email
+        fechaNac:
+          type: string
+          format: date
+      required:
+      - tipo
+      - idReserva
+      - idCliente
+      - idServicio
+      - fecha
+      - confirmado
+      - titulo
+      - precio
+      - descripcion
+      - idUsuario
+      - nombre
+      - apellido
+      - imagen
+      - email
+      - fechaNac
+    ReservaCreatedData:
+      type: object
+      properties:
+        result:
+          type:
+          - string
+          - integer
+      required:
+      - result
+    ReservaSuccessData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+      required:
+      - success
+    PagoClienteRecord:
+      type: object
+      properties:
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+        idProveedor:
+          type: integer
+        fechaPago:
+          type: string
+        estado:
+          type: string
+          enum:
+          - pendiente
+          - completado
+          - fallido
+        precio:
+          type: string
+          description: DECIMAL(10,2) as returned by MySQL, e.g. "1500.00".
+        titulo:
+          type: string
+        paymentId:
+          type:
+          - string
+          - 'null'
+        servicioTitulo:
+          type: string
+        servicioDescripcion:
+          type: string
+        nombre:
+          type: string
+        apellido:
+          type: string
+        imagen:
+          type: string
+        nombreEmpresa:
+          type: string
+      required:
+      - idCliente
+      - idServicio
+      - idProveedor
+      - fechaPago
+      - estado
+      - precio
+      - titulo
+      - paymentId
+      - servicioTitulo
+      - servicioDescripcion
+      - nombre
+      - apellido
+      - imagen
+      - nombreEmpresa
+    PagoProveedorRecord:
+      type: object
+      properties:
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+        idProveedor:
+          type: integer
+        fechaPago:
+          type: string
+        estado:
+          type: string
+          enum:
+          - pendiente
+          - completado
+          - fallido
+        precio:
+          type: string
+        titulo:
+          type: string
+        paymentId:
+          type:
+          - string
+          - 'null'
+        servicioTitulo:
+          type: string
+        servicioDescripcion:
+          type: string
+        nombre:
+          type: string
+        apellido:
+          type: string
+        imagen:
+          type: string
+      required:
+      - idCliente
+      - idServicio
+      - idProveedor
+      - fechaPago
+      - estado
+      - precio
+      - titulo
+      - paymentId
+      - servicioTitulo
+      - servicioDescripcion
+      - nombre
+      - apellido
+      - imagen
+    PagoCreatedData:
+      type: object
+      properties:
+        funciono:
+          type: boolean
+          const: true
+      required:
+      - funciono
+    PagoConfirmedData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        paymentId:
+          type: string
+      required:
+      - success
+      - message
+      - paymentId
+    CancelResultData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        refund_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - success
+      - message
+    ApproveResultData:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        payment_status:
+          type:
+          - string
+          - 'null'
+        captured_amount:
+          type:
+          - number
+          - 'null'
+      required:
+      - success
+      - message
+    MpPreferenceData:
+      type: object
+      properties:
+        preferenciaMP:
+          type: object
+          properties:
+            preference_id:
+              type: string
+            public_key:
+              type:
+              - string
+              - 'null'
+          required:
+          - preference_id
+          - public_key
+      required:
+      - preferenciaMP
+    ContratadoData:
+      type: object
+      properties:
+        contratado:
+          type: boolean
+      required:
+      - contratado
+    TokensSavedData:
+      type: array
+      maxItems: 0
+      description: Always [] on success.
+    IaResponseData:
+      type: object
+      properties:
+        response:
+          type: string
+          description: Groq content string, or a JSON-encoded error string when Groq/network fails.
+      required:
+      - response
+    ResultMessageData:
+      type: object
+      properties:
+        result:
+          type: string
+      required:
+      - result
+    ByProviderEmptyData:
+      type: object
+      properties:
+        response:
+          type: object
+          properties:
+            result:
+              type: string
+      required:
+      - response
+    FavoritosEmptyData:
+      type: object
+      properties:
+        isFavorito:
+          type: boolean
+          const: false
+        result:
+          type: string
+      required:
+      - isFavorito
+      - result
+    AdminVerifyData:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+      - success
+      - message
+    AdminRegisterData:
+      type: object
+      properties:
+        id:
+          type:
+          - string
+          - integer
+      required:
+      - id
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        apellido:
+          type: string
+        email:
+          type: string
+        fechaNac:
+          type: string
+        imagen:
+          type: string
+        telefono:
+          type: string
+        tipoUsuario:
+          type: string
+          enum:
+          - Cliente
+          - Proveedor
+          - Moderador
+          - Desconocido
+      additionalProperties: true
+    AdminService:
+      type: object
+      properties:
+        id:
+          type: integer
+        titulo:
+          type: string
+        descripcion:
+          type: string
+        precio:
+          type: integer
+        idProveedor:
+          type: integer
+        categorias:
+          type:
+          - string
+          - 'null'
+      additionalProperties: true
+    AdminReview:
+      type: object
+      properties:
+        id:
+          type: integer
+        calificacion:
+          type: integer
+        comentario:
+          type: string
+        idCliente:
+          type: integer
+        idServicio:
+          type: integer
+      additionalProperties: true
+    MessageData:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+x-routing-table:
+  /usuario:
+    file: backend/src/routes/Usuario.php
+    routed: true
+  /servicios:
+    file: backend/src/routes/Servicio.php
+    routed: true
+  /chat:
+    file: backend/src/routes/Chat.php
+    routed: true
+  /review:
+    file: backend/src/routes/Resena.php
+    routed: true
+  /reserva:
+    file: backend/src/routes/Reserva.php
+    routed: true
+  /pago:
+    file: backend/src/routes/Pago.php
+    routed: true
+  /admin:
+    file: backend/src/routes/Admin.php
+    routed: false
+    note: No admin case in index.php -> default 404.
+x-auth:
+  scheme: none
+  description: No authentication or session exists. Identity parameters are trusted from the request.
+x-options:
+  nginx: 204 with empty body (handled before PHP)
+  php-only: 200 with empty body (index.php early exit)
+x-harness: Executed with PHP 8.4.23 built-in server and MariaDB 10.6.21 in a loopback-only network namespace, because Docker is unavailable in
+  the documentation environment. External calls are therefore observed as DNS failures; see docs/api/DUDAS.md.
